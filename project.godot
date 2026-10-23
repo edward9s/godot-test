@@ -3,7 +3,7 @@ config_version=5
 [application]
 config/name="Forest Ruins Godot"
 run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.7", "Mobile")
+config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]
 window/size/viewport_width=1280
@@ -11,16 +11,16 @@ window/size/viewport_height=720
 window/handheld/orientation=1
 
 [rendering]
-renderer/rendering_method="mobile"
-renderer/rendering_method.mobile="mobile"
-anti_aliasing/quality/msaa_3d=2
-anti_aliasing/quality/use_taa=false
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="forward_plus"
+anti_aliasing/quality/msaa_3d=1
+anti_aliasing/quality/use_taa=true
 textures/vram_compression/import_etc2_astc=true
-# Four cascades share the directional shadow atlas.
-# Android's default mobile override halves the atlas and severely undersamples thin foliage.
+; Four cascades share the directional shadow atlas.
+; Android's default mobile override halves the atlas and severely undersamples thin foliage.
 lights_and_shadows/directional_shadow/size=4096
 lights_and_shadows/directional_shadow/size.mobile=4096
-# Mobile defaults to the lowest PCF filter quality unless explicitly overridden.
+; Keep Android shadow filtering at the same quality as desktop.
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=2
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=2
 

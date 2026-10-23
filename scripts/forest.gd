@@ -5,6 +5,7 @@ const FOREST := preload("res://assets/generated/forest.glb")
 const CANOPY_IMAGE := preload("res://assets/generated/canopy.png")
 const LEAVES_SHADER := preload("res://shaders/leaves.gdshader")
 const CANOPY_SHADER := preload("res://shaders/canopy.gdshader")
+const EFFECTS := preload("res://scripts/effects.gd")
 const TARGET := Vector3(0.0, 1.6, -3.0)
 const SUN_DIRECTION := Vector3(-0.32, -0.82, -0.47)
 
@@ -23,6 +24,10 @@ func _ready() -> void:
     _create_camera()
     _create_fps()
     _update_camera()
+    var effects := EFFECTS.new()
+    effects.name = "Effects"
+    add_child(effects)
+    effects.animate(0.0, camera.global_position)
 
 func _create_scene() -> void:
     var forest := FOREST.instantiate()
@@ -32,19 +37,30 @@ func _create_scene() -> void:
     var canopy_material := ShaderMaterial.new()
     canopy_material.shader = CANOPY_SHADER
     canopy_material.set_shader_parameter("pine_texture", CANOPY_IMAGE)
-    _replace_foliage_materials(forest, leaves_material, canopy_material)
+    _configure_materials(forest, leaves_material, canopy_material)
 
-func _replace_foliage_materials(node: Node, leaves_material: Material, canopy_material: Material) -> void:
+func _configure_materials(node: Node, leaves_material: Material, canopy_material: Material) -> void:
     if node is MeshInstance3D:
         var mesh_instance := node as MeshInstance3D
         if mesh_instance.name.begins_with("Leaves_"):
             mesh_instance.set_surface_override_material(0, leaves_material)
+            mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_DOUBLE_SIDED
+            mesh_instance.extra_cull_margin = 0.12
         elif mesh_instance.name.begins_with("Canopy_"):
             mesh_instance.set_surface_override_material(0, canopy_material)
-        elif mesh_instance.name.begins_with("Ground_"):
-            mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_DOUBLE_SIDED
+            mesh_instance.extra_cull_margin = 0.12
+        else:
+            var material := mesh_instance.get_active_material(0) as StandardMaterial3D
+            assert(material != null, "Expected imported PBR surface material")
+            # Godot's glTF importer leaves this disabled. The generator's linear
+            # vertex tint carries stone variation, bark shading and ground color.
+            material.vertex_color_use_as_albedo = true
+            material.vertex_color_is_srgb = false
+            if mesh_instance.name.begins_with("Ground_"):
+                mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     for child in node.get_children():
-        _replace_foliage_materials(child, leaves_material, canopy_material)
+        _configure_materials(child, leaves_material, canopy_material)
 
 func _create_environment() -> void:
     var panorama := PanoramaSkyMaterial.new()
@@ -57,15 +73,21 @@ func _create_environment() -> void:
     environment.sky = sky
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_BG
-    # The HDR sky is bright; calibrate both skylight and direct light for the forest clearing.
-    environment.ambient_light_energy = 0.60
-    environment.background_energy_multiplier = 0.80
-    environment.tonemap_mode = Environment.TONE_MAPPER_AGX
+    # This HDRI supplies both diffuse irradiance and roughness-filtered reflections.
+    environment.ambient_light_energy = 0.18
+    environment.background_energy_multiplier = 0.50
+    environment.tonemap_mode = Environment.TONE_MAPPER_ACES
+    environment.ssao_enabled = true
+    environment.ssao_radius = 0.75
+    environment.ssao_intensity = 1.2
+    environment.ssao_power = 1.2
+    environment.ssao_light_affect = 0.0
     environment.glow_enabled = true
     environment.glow_intensity = 0.065
     environment.fog_enabled = true
     environment.fog_light_color = Color(0.36, 0.43, 0.44)
     environment.fog_density = 0.004
+    environment.fog_aerial_perspective = 0.25
     var world := WorldEnvironment.new()
     world.environment = environment
     add_child(world)
@@ -73,14 +95,20 @@ func _create_environment() -> void:
 func _create_sun() -> void:
     var sun := DirectionalLight3D.new()
     sun.name = "WarmSun"
-    sun.light_color = Color(1.0, 0.88, 0.70)
-    sun.light_energy = 2.2
-    # Preserve the source sun's angular radius. Mobile uses PCF, not PCSS.
-    sun.light_angular_distance = 0.53
-    sun.shadow_blur = 1.25
+    # Filament supplies linear RGB; Godot's light color property takes sRGB.
+    sun.light_color = Color(1.0, 0.88, 0.70).linear_to_srgb()
+    sun.light_energy = 1.1
+    # Godot uses angular diameter; Filament's source radius is 0.53 degrees.
+    sun.light_angular_distance = 1.06
+    sun.shadow_blur = 1.0
+    sun.shadow_bias = 0.03
+    sun.shadow_normal_bias = 0.35
     sun.shadow_enabled = true
     sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
     sun.directional_shadow_max_distance = 48.0
+    sun.directional_shadow_split_1 = 0.12
+    sun.directional_shadow_split_2 = 0.38
+    sun.directional_shadow_split_3 = 0.65
     sun.directional_shadow_blend_splits = true
     sun.directional_shadow_pancake_size = 8.0
     add_child(sun)
@@ -92,9 +120,9 @@ func _create_camera() -> void:
     camera.fov = 52.0
     camera.near = 0.1
     camera.far = 100.0
-    # Fixed exposure avoids an overexposed clearing on Godot Mobile.
+    # Keep exposure fixed so flashes do not dim the whole forest.
     var attributes := CameraAttributesPractical.new()
-    attributes.exposure_multiplier = 0.82
+    attributes.exposure_multiplier = 0.65
     camera.attributes = attributes
     camera.current = true
     add_child(camera)
@@ -170,3 +198,4 @@ func _unhandled_input(event: InputEvent) -> void:
         elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
             distance = minf(24.0, distance + 1.0)
             _update_camera()
+
