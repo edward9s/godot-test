@@ -57,7 +57,9 @@ func _create_environment() -> void:
     environment.sky = sky
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_BG
-    environment.ambient_light_energy = 0.85
+    # The HDR sky is bright; calibrate both skylight and direct light for the forest clearing.
+    environment.ambient_light_energy = 0.60
+    environment.background_energy_multiplier = 0.80
     environment.tonemap_mode = Environment.TONE_MAPPER_AGX
     environment.glow_enabled = true
     environment.glow_intensity = 0.065
@@ -72,11 +74,16 @@ func _create_sun() -> void:
     var sun := DirectionalLight3D.new()
     sun.name = "WarmSun"
     sun.light_color = Color(1.0, 0.88, 0.70)
-    sun.light_energy = 3.5
-    sun.light_angular_distance = 0.53
+    sun.light_energy = 2.2
+    # Mobile PCSS on a densely alpha-masked canopy can create unstable/noisy penumbrae.
+    # A filtered fixed-width shadow is more stable than an area-sized PCSS shadow.
+    sun.light_angular_distance = 0.0
+    sun.shadow_blur = 1.25
     sun.shadow_enabled = true
     sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-    sun.directional_shadow_max_distance = 65.0
+    sun.directional_shadow_max_distance = 48.0
+    sun.directional_shadow_blend_splits = true
+    sun.directional_shadow_pancake_size = 8.0
     add_child(sun)
     sun.look_at(sun.global_position + SUN_DIRECTION, Vector3.UP)
 
@@ -86,6 +93,10 @@ func _create_camera() -> void:
     camera.fov = 52.0
     camera.near = 0.1
     camera.far = 100.0
+    # Fixed exposure avoids an overexposed clearing on Godot Mobile.
+    var attributes := CameraAttributesPractical.new()
+    attributes.exposure_multiplier = 0.82
+    camera.attributes = attributes
     camera.current = true
     add_child(camera)
 
