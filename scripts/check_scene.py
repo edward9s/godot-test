@@ -24,4 +24,14 @@ for name in ["Ground", "Stone", "Bark", "Leaves", "Canopy"]:
     assert any(mesh["name"].startswith(name + "_") for mesh in meshes), name
 assert (root / "canopy.png").stat().st_size > 10_000
 assert (root / "environment.hdr").stat().st_size > 10_000
-print("Validated scene: all materials, source geometry and HDR environment present")
+# Guard against visual "fixes" that silently remove the source's animated vegetation.
+project = pathlib.Path(__file__).resolve().parents[1]
+for name in ("canopy", "leaves"):
+    shader = (project / "shaders" / (name + ".gdshader")).read_text()
+    assert "void vertex()" in shader and "TIME" in shader and "VERTEX.xz +=" in shader, (
+        f"{name} wind deformation must remain enabled"
+    )
+settings = (project / "project.godot").read_text()
+assert "directional_shadow/size.mobile=4096" in settings
+assert "directional_shadow/soft_shadow_filter_quality.mobile=2" in settings
+print("Validated scene: geometry, HDR, animated foliage and Mobile shadow quality")

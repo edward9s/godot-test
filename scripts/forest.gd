@@ -75,9 +75,8 @@ func _create_sun() -> void:
     sun.name = "WarmSun"
     sun.light_color = Color(1.0, 0.88, 0.70)
     sun.light_energy = 2.2
-    # Mobile PCSS on a densely alpha-masked canopy can create unstable/noisy penumbrae.
-    # A filtered fixed-width shadow is more stable than an area-sized PCSS shadow.
-    sun.light_angular_distance = 0.0
+    # Preserve the source sun's angular radius. Mobile uses PCF, not PCSS.
+    sun.light_angular_distance = 0.53
     sun.shadow_blur = 1.25
     sun.shadow_enabled = true
     sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
