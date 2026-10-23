@@ -1,0 +1,7 @@
+# Generated scene files are reproducible from hash-pinned CC0 sources.
+.deps/
+assets/generated/
+.godot/
+build/
+*.apk
+.DS_Store
