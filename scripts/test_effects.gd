@@ -13,10 +13,9 @@ func _test() -> void:
     for time in [0.0, 0.12, 0.3, 1.8, 4.8, 5.4, 10.8, 108.0]:
         effects.animate(time, eye)
         for kind in range(6):
-            var mesh: ImmediateMesh = effects.meshes[kind]
-            assert(mesh.get_surface_count() == 1)
-            var arrays := mesh.surface_get_arrays(0)
-            var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+            var batch = effects.batches[kind]
+            assert(batch.mesh.get_surface_count() == 1)
+            var vertices: PackedVector3Array = batch.vertices
             assert(vertices.size() == Effects.COUNTS[kind] * 6)
             for vertex in vertices:
                 assert(vertex.is_finite())
@@ -24,15 +23,15 @@ func _test() -> void:
                 assert((vertices[i + 1] - vertices[i]).cross(vertices[i + 2] - vertices[i]).length() > 0.000001)
         assert(effects.lights[0].light_energy > 0.0)
     effects.animate(1.8, eye)
-    var before := effects.meshes[0].surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+    var before := effects.batches[0].vertices as PackedVector3Array
     effects.animate(1.8, eye)
-    assert(before == effects.meshes[0].surface_get_arrays(0)[Mesh.ARRAY_VERTEX])
+    assert(before == effects.batches[0].vertices)
     effects.animate(1.9, eye)
-    assert(before != effects.meshes[0].surface_get_arrays(0)[Mesh.ARRAY_VERTEX])
+    assert(before != effects.batches[0].vertices)
     # At idle, explosion and lightning particles must be fully transparent.
     effects.animate(3.0, eye)
     for kind in [Effects.Kind.BLAST, Effects.Kind.LIGHTNING]:
-        var colors: PackedColorArray = effects.meshes[kind].surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+        var colors: PackedColorArray = effects.batches[kind].colors
         for color in colors:
             assert(color.a < 0.003)
     assert(Effects.lightning_pulse(0.12) > 0.99)
@@ -50,7 +49,7 @@ func _test() -> void:
     effects.animate(0.3, eye)
     var winding := [0, 3, 2, 0, 2, 1]
     for kind in range(6):
-        var positions: PackedVector3Array = effects.meshes[kind].surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+        var positions: PackedVector3Array = effects.batches[kind].vertices
         for i in range(6):
             var p: Array = reference[kind][winding[i]]
             assert(positions[i].distance_to(Vector3(p[0], p[1], p[2])) < 0.001)

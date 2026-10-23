@@ -45,7 +45,7 @@ The five displays follow [filament-test PR #4](https://github.com/edward9s/filam
 | Lightning | 6.3, −3.2 | Branching double strike every 4.8 seconds with local flash |
 | Smoke | −7.0, −6.2 | Continuous drifting dense column |
 
-`scripts/effects.gd` ports the deterministic seeds, equations, particle counts and sites. Six `ImmediateMesh` batches total 583 quads / 1,166 triangles. Transparent puffs are sorted back to front for the orbit camera; water uses moving tangent normals, foam and HDR sky reflections. Fire, explosion and lightning animate three nearby point lights. Emission and light energies are calibrated in Godot units. No particle textures, physics or extra asset downloads are required.
+`scripts/effects.gd` ports the deterministic seeds, equations, particle counts and sites. Six persistent `ArrayMesh` batches total 583 quads / 1,166 triangles. `scripts/effect_batch.gd` allocates each surface once and updates vertex/attribute buffer regions in place. Animation never clears or recreates GPU surfaces. Fixed bounds cover the entire motion; water normal and tangent buffers update with its geometry. Transparent puffs are sorted back to front for the orbit camera; water uses moving tangent normals, foam and HDR sky reflections. Fire, explosion and lightning animate three nearby point lights. Emission and light energies are calibrated in Godot units. No particle textures, physics or extra asset downloads are required.
 
 Validate after generating and importing assets:
 
@@ -53,6 +53,9 @@ Validate after generating and importing assets:
 python3 scripts/check_scene.py
 godot --headless --path . --script scripts/test_effects.gd
 godot --headless --path . --script scripts/test_scene.gd
+# Continuous Vulkan rendering; fail on growing memory or incorrect GPU uploads:
+godot --path . --audio-driver Dummy --script scripts/test_stability.gd -- effects 3600
+godot --path . --audio-driver Dummy --script scripts/test_stability.gd -- scene 180
 # Actual framebuffer capture, with a Vulkan display:
 godot --path . --script scripts/render_preview.gd -- /tmp/godot-effects.png 0.3
 ```

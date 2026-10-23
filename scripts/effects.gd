@@ -5,11 +5,12 @@ extends Node3D
 enum Kind { FIRE, BLAST, SPRAY, LIGHTNING, SMOKE, WATER }
 const PARTICLES := preload("res://shaders/effects.gdshader")
 const WATER := preload("res://shaders/water.gdshader")
+const Batch := preload("res://scripts/effect_batch.gd")
 const SITES := [Vector2(-3.2, 3.1), Vector2(-6.3, -1.6), Vector2(3.5, 3.5),
     Vector2(6.3, -3.2), Vector2(-7.0, -6.2), Vector2(3.5, 3.5)]
 const COUNTS := [78, 108, 45, 36, 52, 264]
 
-var meshes: Array[ImmediateMesh] = []
+var batches: Array[Batch] = []
 var materials: Array[ShaderMaterial] = []
 var lights: Array[OmniLight3D] = []
 var seconds := 0.0
@@ -41,11 +42,12 @@ func _ready() -> void:
         if kind != Kind.WATER:
             material.set_shader_parameter("kind", kind)
         materials.append(material)
-        var mesh := ImmediateMesh.new()
-        meshes.append(mesh)
+        var bounds := AABB(origin(kind) - Vector3(8, 1, 8), Vector3(16, 24, 16))
+        var batch := Batch.new(COUNTS[kind], material, bounds, kind == Kind.WATER)
+        batches.append(batch)
         var instance := MeshInstance3D.new()
         instance.name = Kind.keys()[kind]
-        instance.mesh = mesh
+        instance.mesh = batch.mesh
         instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         add_child(instance)
     for kind in [Kind.FIRE, Kind.BLAST, Kind.LIGHTNING]:
@@ -63,22 +65,11 @@ func _process(delta: float) -> void:
     seconds += delta
     animate(seconds, get_viewport().get_camera_3d().global_position)
 
-func _quad(mesh: ImmediateMesh, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+func _quad(batch: Batch, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
         color: Color, uv := Rect2(0, 0, 1, 1)) -> void:
-    var tangent := (b - a).normalized()
-    # The source winding is CCW. Godot front faces are clockwise.
-    var normal := (b - a).cross(d - a).normalized()
-    mesh.surface_set_normal(normal)
-    mesh.surface_set_tangent(Plane(tangent, -1.0))
-    mesh.surface_set_color(color)
-    var positions := [a, d, c, a, c, b]
-    var uvs := [uv.position, Vector2(uv.position.x, uv.end.y), uv.end,
-        uv.position, uv.end, Vector2(uv.end.x, uv.position.y)]
-    for i in range(6):
-        mesh.surface_set_uv(uvs[i])
-        mesh.surface_add_vertex(positions[i])
+    batch.quad(a, b, c, d, color, uv)
 
-func _billboards(mesh: ImmediateMesh, puffs: Array, eye: Vector3) -> void:
+func _billboards(mesh: Batch, puffs: Array, eye: Vector3) -> void:
     puffs.sort_custom(func(a: Array, b: Array) -> bool:
         return (a[0] as Vector3).distance_squared_to(eye) > (b[0] as Vector3).distance_squared_to(eye))
     for puff: Array in puffs:
@@ -93,7 +84,7 @@ func _billboards(mesh: ImmediateMesh, puffs: Array, eye: Vector3) -> void:
         var y: Vector3 = direction.cross(right).normalized() * puff[2] * 0.5
         _quad(mesh, p - x - y, p + x - y, p + x + y, p - x + y, puff[3])
 
-func _ribbon(mesh: ImmediateMesh, a: Vector3, b: Vector3, width: float, color: Color, eye: Vector3) -> void:
+func _ribbon(mesh: Batch, a: Vector3, b: Vector3, width: float, color: Color, eye: Vector3) -> void:
     var side := (b - a).cross(eye - (a + b) * 0.5).normalized()
     if side.is_zero_approx():
         side = Vector3.RIGHT
@@ -119,8 +110,7 @@ func animate(time: float, eye: Vector3) -> void:
     assert(is_finite(time) and time >= 0.0 and eye.is_finite())
     for kind in range(6):
         materials[kind].set_shader_parameter("seconds", time)
-        meshes[kind].clear_surfaces()
-        meshes[kind].surface_begin(Mesh.PRIMITIVE_TRIANGLES, materials[kind])
+        batches[kind].begin()
     var puffs: Array = []
     var fire := origin(Kind.FIRE)
     for i in range(54):
@@ -138,7 +128,7 @@ func animate(time: float, eye: Vector3) -> void:
         var angle := seed * TAU
         puffs.append([fire + Vector3(0.45 * sin(angle + age * 3.0), age * 3.0, 0.4 * cos(angle)),
             0.025, 0.09, Color(1, 0.4, 0.06, (1.0 - age) * 0.85)])
-    _billboards(meshes[Kind.FIRE], puffs, eye)
+    _billboards(batches[Kind.FIRE], puffs, eye)
     puffs.clear()
 
     var blast := origin(Kind.BLAST)
@@ -159,7 +149,7 @@ func animate(time: float, eye: Vector3) -> void:
         var p := blast + Vector3(cos(angle) * t * speed,
             maxf(0.04, t * (2.5 + random(i + 9) * 2.0) - 2.6 * t * t), sin(angle) * t * speed)
         puffs.append([p, 0.035, 0.15, Color(1, 0.6, 0.1, clampf(1.0 - age / 1.5, 0.0, 1.0))])
-    _billboards(meshes[Kind.BLAST], puffs, eye)
+    _billboards(batches[Kind.BLAST], puffs, eye)
     puffs.clear()
 
     var water := origin(Kind.WATER)
@@ -170,11 +160,11 @@ func animate(time: float, eye: Vector3) -> void:
         puffs.append([water + Vector3(0.75 + cos(angle) * t * 0.7,
             -0.07 + maxf(0.0, t * 1.3 - 1.25 * t * t), 1.45 + sin(angle) * t * 0.7),
             0.04 + 0.08 * t, 0.08 + 0.09 * t, Color(0.6, 0.8, 0.86, (1.0 - t) * 0.75)])
-    _billboards(meshes[Kind.SPRAY], puffs, eye)
+    _billboards(batches[Kind.SPRAY], puffs, eye)
     puffs.clear()
     for z in range(12):
         for x in range(6):
-            _quad(meshes[Kind.WATER], _water_point(x, z, time), _water_point(x + 1, z, time),
+            _quad(batches[Kind.WATER], _water_point(x, z, time), _water_point(x + 1, z, time),
                 _water_point(x + 1, z + 1, time), _water_point(x, z + 1, time), Color(0.065, 0.17, 0.16, 0.62),
                 Rect2(float(x) / 6.0, float(z) / 12.0, 1.0 / 6.0, 1.0 / 12.0))
     for i in range(24):
@@ -189,20 +179,20 @@ func animate(time: float, eye: Vector3) -> void:
             var angle1 := TAU * (j + 1) / 8.0
             var x := (side * cos(angle0) + up * sin(angle0)) * radius
             var y := (side * cos(angle1) + up * sin(angle1)) * radius
-            _quad(meshes[Kind.WATER], a + x, a + y, b + y, b + x, Color(0.16, 0.35, 0.38, 0.56),
+            _quad(batches[Kind.WATER], a + x, a + y, b + y, b + x, Color(0.16, 0.35, 0.38, 0.56),
                 Rect2(float(j) / 8.0, float(i) / 24.0, 1.0 / 8.0, 1.0 / 24.0))
 
     var pulse := lightning_pulse(time)
     var strike := int(floor(time / 4.8))
     for i in range(18):
-        _ribbon(meshes[Kind.LIGHTNING], _bolt_point(i, strike), _bolt_point(i + 1, strike),
+        _ribbon(batches[Kind.LIGHTNING], _bolt_point(i, strike), _bolt_point(i + 1, strike),
             0.1, Color(0.5, 0.7, 1, pulse), eye)
     for branch in range(3):
         var a := _bolt_point(4 + branch * 4, strike)
         for i in range(6):
             var b := a + Vector3((1.0 if branch % 2 else -1.0) * (0.13 + random(i + branch * 11) * 0.22),
                 -0.28, (random(i + 2) * 2.0 - 1.0) * 0.25)
-            _ribbon(meshes[Kind.LIGHTNING], a, b, 0.045, Color(0.35, 0.55, 1, pulse * (1.0 - float(i) / 7.0)), eye)
+            _ribbon(batches[Kind.LIGHTNING], a, b, 0.045, Color(0.35, 0.55, 1, pulse * (1.0 - float(i) / 7.0)), eye)
             a = b
 
     var smoke := origin(Kind.SMOKE)
@@ -215,9 +205,9 @@ func animate(time: float, eye: Vector3) -> void:
             0.35 + t * 5.5, cos(angle + t * 2.0) * (0.2 + t * 0.55))
         var shade := 0.055 + t * 0.08
         puffs.append([p, size, size * 1.15, Color(shade, shade * 1.01, shade * 1.04, sin(PI * t) * 0.7)])
-    _billboards(meshes[Kind.SMOKE], puffs, eye)
-    for mesh in meshes:
-        mesh.surface_end()
+    _billboards(batches[Kind.SMOKE], puffs, eye)
+    for batch in batches:
+        batch.upload()
     lights[0].light_energy = 1.2 * (1.0 + 0.13 * sin(time * 13.0) + 0.09 * sin(time * 23.0))
     lights[1].light_energy = 8.0 * exp(-blast_age(time) * 7.0)
     lights[2].light_energy = 4.0 * pulse
