@@ -25,13 +25,21 @@ Use **Actions → Android test build → Run workflow** to generate a signed arm
 
 ## Scene and controls
 
-The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`); linear source light colors are converted to Godot’s sRGB light properties. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. FPS is overlaid at top-left.
+The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`); linear source light colors are converted to Godot’s sRGB light properties. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. FPS and the active rendering method are overlaid at top-left.
 
-Desktop and Android now use **Forward+** to support SSAO, TAA and PCSS sun shadows. SSAO uses the source's 0.75 m radius and 1.2 power, while the HDRI supplies diffuse ambient lighting and filtered reflections. TAA combines with 2× MSAA to reduce temporal aliasing on fine vegetation. Four blended shadow cascades cover 48 m using a 4096 atlas, including the Android override; split distances are 12%, 38% and 65%. Bias is explicitly 0.03 and normal bias 0.35, avoiding the default large normal offset that loses contact shadows on small leaves. PCSS uses a 1.06° angular diameter corresponding to the source's 0.53° solar radius. Shadow filter quality remains 2 on both platforms.
+Desktop uses **Forward+** for SSAO, TAA and PCSS sun shadows. Android uses **Mobile**, with 2× MSAA and PCF shadows. SSAO, TAA and angular PCSS are explicitly disabled when the active renderer is Mobile; this is a visible quality tradeoff, not equivalent output. On Forward+, SSAO uses the source's 0.75 m radius and 1.2 power, and TAA combines with 2× MSAA. Both renderers use the HDRI for diffuse ambient lighting and filtered reflections. Four blended shadow cascades cover 48 m using a 4096 atlas, including the Android override; split distances are 12%, 38% and 65%. Bias is explicitly 0.03 and normal bias 0.35, avoiding the default large normal offset that loses contact shadows on small leaves. On Forward+, PCSS uses a 1.06° angular diameter corresponding to the source's 0.53° solar radius. Shadow filter quality remains 2 on both platforms.
 
 Imported ground, stone and bark materials explicitly enable the generator's linear vertex colors. Godot 4.7.2 leaves this material flag off after glTF import, losing the source tints and surface variation.
 
-All original canopy and leaf wind deformation remains enabled in the color and shadow passes. Foliage casts double-sided shadows with a 0.12 m culling margin for wind. Back faces have corrected normals and a modest backlight term approximates the source's leaf transmission. Sky energy (0.50), ambient multiplier (0.18), warm sunlight (1.1), ACES tone mapping and fixed camera exposure (0.65) aim for a quieter forest rather than a washed-out clearing. Glow and distance fog remain enabled. These settings require a Vulkan-capable Android device and cost more GPU time than the previous Mobile renderer. FPS and physical-device comparison are needed to judge the tradeoff.
+All original canopy and leaf wind deformation remains enabled in the color and shadow passes. Foliage casts double-sided shadows with a 0.12 m culling margin for wind. Back faces have corrected normals and a modest backlight term approximates the source's leaf transmission. Sky energy (0.50), ambient multiplier (0.18), warm sunlight (1.1), ACES tone mapping and fixed camera exposure (0.65) aim for a quieter forest rather than a washed-out clearing. Glow and distance fog remain enabled. Android still requires Vulkan. Retest stability and compare image quality on the physical device; a software Vulkan test cannot validate an Adreno driver.
+
+## Android Vulkan crash
+
+The supplied SM-X700 log reports compute-pipeline creation failure (`VkResult -13`), followed by Vulkan device loss and an intentional Godot SIGTRAP after 26 seconds. The log identifies the rendering failure but does not name the failed shader or prove the cause of device loss. Upstream [#124406](https://github.com/godotengine/godot/issues/124406) reports a similar startup error on another Android 16 Adreno device with Godot 4.7.2, and reports that Mobile avoids it; that report remains unconfirmed by maintainers and does not prove an identical defect on this tablet.
+
+Version 0.1.1 switches Android back to its original Mobile rendering path, avoiding Forward+-only internal pipelines. Desktop Forward+ remains available. All five effects, animated foliage, source geometry, material AO/normal maps, 4096 shadow atlas, four shadow cascades, HDRI, exposure, glow and fog remain. The FPS overlay identifies the active renderer. This is a renderer workaround requiring SM-X700 retesting, not an engine/driver fix or a claim of matching Filament quality.
+
+The manual build checks both Vulkan renderers, with scene/material checks, 3,600 effect frames, 180 full-scene frames, stable buffer identities, bounded memory and GPU readback. Release signing still uses the configured repository secrets.
 
 ## Effects
 
@@ -54,8 +62,10 @@ python3 scripts/check_scene.py
 godot --headless --path . --script scripts/test_effects.gd
 godot --headless --path . --script scripts/test_scene.gd
 # Continuous Vulkan rendering; fail on growing memory or incorrect GPU uploads:
-godot --path . --audio-driver Dummy --script scripts/test_stability.gd -- effects 3600
-godot --path . --audio-driver Dummy --script scripts/test_stability.gd -- scene 180
+for renderer in mobile forward_plus; do
+  godot --path . --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd -- effects 3600 "$renderer"
+  godot --path . --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd -- scene 180 "$renderer"
+done
 # Actual framebuffer capture, with a Vulkan display:
 godot --path . --script scripts/render_preview.gd -- /tmp/godot-effects.png 0.3
 ```

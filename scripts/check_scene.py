@@ -34,7 +34,8 @@ for name in ("canopy", "leaves"):
 settings = (project / "project.godot").read_text()
 assert "directional_shadow/size.mobile=4096" in settings
 assert "directional_shadow/soft_shadow_filter_quality.mobile=2" in settings
-assert 'renderer/rendering_method.mobile="forward_plus"' in settings
+assert 'renderer/rendering_method.mobile="mobile"' in settings
 assert 'anti_aliasing/quality/use_taa=true' in settings
-print("Validated scene: geometry, HDR, animated foliage and Forward+ shadow quality")
+assert 'anti_aliasing/quality/use_taa.mobile=false' in settings
+print("Validated scene: geometry, HDR, animated foliage and Android Mobile shadows")
 

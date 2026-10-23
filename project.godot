@@ -12,9 +12,11 @@ window/handheld/orientation=1
 
 [rendering]
 renderer/rendering_method="forward_plus"
-renderer/rendering_method.mobile="forward_plus"
+; Forward+ fails to compile internal pipelines on affected Android Adreno drivers.
+renderer/rendering_method.mobile="mobile"
 anti_aliasing/quality/msaa_3d=1
 anti_aliasing/quality/use_taa=true
+anti_aliasing/quality/use_taa.mobile=false
 textures/vram_compression/import_etc2_astc=true
 ; Four cascades share the directional shadow atlas.
 ; Android's default mobile override halves the atlas and severely undersamples thin foliage.

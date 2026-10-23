@@ -18,6 +18,8 @@ var fps_label: Label
 var fps_elapsed := 0.0
 
 func _ready() -> void:
+    # Also respect a renderer selected explicitly with --rendering-method.
+    get_viewport().use_taa = RenderingServer.get_current_rendering_method() == "forward_plus"
     _create_environment()
     _create_sun()
     _create_scene()
@@ -77,7 +79,7 @@ func _create_environment() -> void:
     environment.ambient_light_energy = 0.18
     environment.background_energy_multiplier = 0.50
     environment.tonemap_mode = Environment.TONE_MAPPER_ACES
-    environment.ssao_enabled = true
+    environment.ssao_enabled = RenderingServer.get_current_rendering_method() == "forward_plus"
     environment.ssao_radius = 0.75
     environment.ssao_intensity = 1.2
     environment.ssao_power = 1.2
@@ -89,6 +91,7 @@ func _create_environment() -> void:
     environment.fog_density = 0.004
     environment.fog_aerial_perspective = 0.25
     var world := WorldEnvironment.new()
+    world.name = "WorldEnvironment"
     world.environment = environment
     add_child(world)
 
@@ -99,7 +102,7 @@ func _create_sun() -> void:
     sun.light_color = Color(1.0, 0.88, 0.70).linear_to_srgb()
     sun.light_energy = 1.1
     # Godot uses angular diameter; Filament's source radius is 0.53 degrees.
-    sun.light_angular_distance = 1.06
+    sun.light_angular_distance = 1.06 if RenderingServer.get_current_rendering_method() == "forward_plus" else 0.0
     sun.shadow_blur = 1.0
     sun.shadow_bias = 0.03
     sun.shadow_normal_bias = 0.35
@@ -138,14 +141,14 @@ func _create_fps() -> void:
     fps_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
     fps_label.add_theme_constant_override("shadow_offset_x", 2)
     fps_label.add_theme_constant_override("shadow_offset_y", 2)
-    fps_label.text = "FPS: --"
+    fps_label.text = "FPS: -- | " + RenderingServer.get_current_rendering_method()
     overlay.add_child(fps_label)
 
 func _process(delta: float) -> void:
     fps_elapsed += delta
     if fps_elapsed >= 0.5:
         fps_elapsed = 0.0
-        fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
+        fps_label.text = "FPS: %d | %s" % [Engine.get_frames_per_second(), RenderingServer.get_current_rendering_method()]
 
 func _update_camera() -> void:
     var horizontal := distance * cos(pitch)

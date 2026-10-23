@@ -14,7 +14,13 @@ func _test() -> void:
     assert(surfaces > 100 and foliage > 10)
     assert(root.get_camera_3d() != null)
     assert(ProjectSettings.get_setting("rendering/renderer/rendering_method") == "forward_plus")
-    assert(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile") == "forward_plus")
+    assert(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile") == "mobile")
+    var forward := RenderingServer.get_current_rendering_method() == "forward_plus"
+    assert(root.use_taa == forward)
+    assert(scene.get_node("WorldEnvironment").environment.ssao_enabled == forward)
+    var sun := scene.get_node("WarmSun") as DirectionalLight3D
+    assert(is_equal_approx(sun.light_angular_distance, 1.06 if forward else 0.0))
+    assert(sun.shadow_enabled and sun.directional_shadow_mode == DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS)
     assert(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/size.mobile") == 4096)
     assert(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile") == 2)
     print("Scene passed: imported PBR tints, animated double-sided shadow casters and orbit camera")
