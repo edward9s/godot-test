@@ -1,0 +1,142 @@
+name: Android test build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: godot-forest-test
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        run: |
+          set -euo pipefail
+          sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
+          test -x "$sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Install Godot 4.5.2 and Android export templates
+        run: |
+          set -euo pipefail
+          version=4.5.2
+          base="https://github.com/godotengine/godot/releases/download/$version-stable"
+          curl -fLsS --retry 3 "$base/Godot_v$version-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP"
+          mv "$RUNNER_TEMP/Godot_v$version-stable_linux.x86_64" "$RUNNER_TEMP/godot"
+          chmod +x "$RUNNER_TEMP/godot"
+          curl -fLsS --retry 3 "$base/Godot_v$version-stable_export_templates.tpz" -o "$RUNNER_TEMP/templates.tpz"
+          mkdir -p "$RUNNER_TEMP/godot-templates" "$HOME/.local/share/godot/export_templates/$version.stable"
+          unzip -q "$RUNNER_TEMP/templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+          cp -a "$RUNNER_TEMP/godot-templates/templates/." \
+            "$HOME/.local/share/godot/export_templates/$version.stable/"
+          test -s "$HOME/.local/share/godot/export_templates/$version.stable/android_release.apk"
+          "$RUNNER_TEMP/godot" --version
+
+      - name: Generate exact source geometry and PBR textures
+        run: |
+          python3 -m pip install --disable-pip-version-check Pillow==11.3.0
+          python3 scripts/prepare_scene.py
+          python3 scripts/check_scene.py
+
+      - name: Configure headless Android exporter and import assets
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
+          "$RUNNER_TEMP/godot" --headless --path . --editor --import --quit
+          find .godot/imported -name '*forest.glb*' -print | grep -q .
+
+      - name: Restore configured signing key (no new identity)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "$(printenv "$name")" ]]; then
+              echo "::error::Missing repository secret: $name"
+              exit 1
+            fi
+          done
+          umask 077
+          source_key="$RUNNER_TEMP/source.jks"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$source_key"
+          test -s "$source_key"
+          keytool -list -keystore "$source_key" -storepass:env STORE_PASSWORD \
+            -alias "$KEY_ALIAS" >/dev/null
+          # Godot accepts only one password for both store and alias.
+          # Repackage the EXISTING key as PKCS12; preserve its certificate/signing identity.
+          keytool -importkeystore -noprompt \
+            -srckeystore "$source_key" -srcstorepass "$STORE_PASSWORD" \
+            -srcalias "$KEY_ALIAS" -srckeypass "$KEY_PASSWORD" \
+            -destkeystore "$RUNNER_TEMP/release.p12" -deststoretype PKCS12 \
+            -deststorepass "$KEY_PASSWORD" -destkeypass "$KEY_PASSWORD" \
+            -destalias "$KEY_ALIAS"
+          keytool -list -keystore "$RUNNER_TEMP/release.p12" \
+            -storepass "$KEY_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+
+      - name: Export and verify signed release APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ runner.temp }}/release.p12
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          "$RUNNER_TEMP/godot" --headless --path . --export-release Android \
+            build/GodotForest-test-arm64.apk
+          test -s build/GodotForest-test-arm64.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose \
+            build/GodotForest-test-arm64.apk
+          unzip -l build/GodotForest-test-arm64.apk | grep -F 'assets/' >/dev/null
+
+      - name: Replace rolling test prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="test-build"
+          apk="build/GodotForest-test-arm64.apk"
+          notes="Latest successful Godot forest build #$GITHUB_RUN_NUMBER, commit $GITHUB_SHA.
+          Exact geometry from filament-test, Godot 4.5.2 release-signed arm64 APK.
+          Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
+              --title "Godot forest test (latest #$GITHUB_RUN_NUMBER)" \
+              --notes "$notes" --prerelease --latest=false
+          else
+            gh release create "$tag" "$apk" --repo "$GITHUB_REPOSITORY" \
+              --title "Godot forest test (latest #$GITHUB_RUN_NUMBER)" \
+              --notes "$notes" --prerelease --latest=false --target "$GITHUB_SHA"
+          fi
+
+      - name: Remove key files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/source.jks" "$RUNNER_TEMP/release.p12"
