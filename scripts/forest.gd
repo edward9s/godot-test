@@ -59,9 +59,6 @@ func _create_environment() -> void:
     environment.reflected_light_source = Environment.REFLECTION_SOURCE_BG
     environment.ambient_light_energy = 0.85
     environment.tonemap_mode = Environment.TONE_MAPPER_AGX
-    environment.ssao_enabled = true
-    environment.ssao_radius = 0.75
-    environment.ssao_intensity = 1.2
     environment.glow_enabled = true
     environment.glow_intensity = 0.065
     environment.fog_enabled = true

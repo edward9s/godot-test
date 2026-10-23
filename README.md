@@ -21,11 +21,11 @@ Use **Actions → Android test build → Run workflow** to generate a signed arm
 
 ## Scene and controls
 
-The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`), including cascaded dynamic shadows. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. FPS is overlaid at top-left. Forward+ rendering is used for SSAO; actual Android performance depends on the device.
+The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`), including cascaded dynamic shadows. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. FPS is overlaid at top-left. Godot Mobile renderer is used for Android with ETC2/ASTC-compressed textures, PBR, HDR sky, glow, fog and cascaded sun shadows. Mobile does not support Forward+-only SSAO or TAA; MSAA remains enabled. Actual Android performance depends on the device.
 
 ## Differences from Filament
 
-Godot and Filament implement PBR response, IBL filtering, exposure, TAA and fog differently. Same source geometry and texture inputs enable close composition but do not promise pixel-for-pixel reproduction. Compare screenshots on the same device for final tuning.
+Godot and Filament implement PBR response, IBL filtering, exposure, antialiasing and fog differently. Same source geometry and texture inputs enable close composition but do not promise pixel-for-pixel reproduction. Compare screenshots on the same device for final tuning.
 
 ## Asset credits
 
