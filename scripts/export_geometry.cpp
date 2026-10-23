@@ -18,10 +18,10 @@ static void write_f32(std::ofstream& stream, float value) {
     if (!std::isfinite(value)) throw std::runtime_error("Non-finite geometry data");
     stream.write(reinterpret_cast<const char*>(&value), sizeof(value));
 }
-static void vec3(std::ofstream& stream, float3 v) {
+static void write_vec3(std::ofstream& stream, float3 v) {
     write_f32(stream, v.x); write_f32(stream, v.y); write_f32(stream, v.z);
 }
-static void vec4(std::ofstream& stream, float x, float y, float z, float w) {
+static void write_vec4(std::ofstream& stream, float x, float y, float z, float w) {
     write_f32(stream, x); write_f32(stream, y); write_f32(stream, z); write_f32(stream, w);
 }
 int main(int argc, char** argv) {
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
                 lo = min(lo, v.position);
                 hi = max(hi, v.position);
             }
-            vec3(stream, lo); vec3(stream, hi);
+            write_vec3(stream, lo); write_vec3(stream, hi);
             for (size_t i = 0; i < vertices.size(); i += 3) {
                 auto a = vertices[i], b = vertices[i + 1], c = vertices[i + 2];
                 float3 ab = b.position - a.position;
@@ -64,12 +64,12 @@ int main(int argc, char** argv) {
                 for (size_t j = i; j < i + 3; ++j) {
                     auto& v = vertices[j];
                     // 64 byte interleaved glTF vertex: P3/N3/T4/UV2/C4.
-                    vec3(stream, v.position);
-                    vec3(stream, n);
-                    vec4(stream, tangent.x, tangent.y, tangent.z, sign);
+                    write_vec3(stream, v.position);
+                    write_vec3(stream, n);
+                    write_vec4(stream, tangent.x, tangent.y, tangent.z, sign);
                     write_f32(stream, v.uv.x);
                     write_f32(stream, v.uv.y);
-                    vec4(stream, v.color.x, v.color.y, v.color.z, v.color.w);
+                    write_vec4(stream, v.color.x, v.color.y, v.color.z, v.color.w);
                 }
             }
             for (auto index : mesh.indices) {
