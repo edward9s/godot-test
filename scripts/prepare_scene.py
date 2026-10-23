@@ -165,9 +165,10 @@ def main():
         target = CACHE / "sources" / (entry["name"] + ext)
         download(entry["url"], target, entry["sha256"])
         sources[entry["name"]] = target
-        with Image.open(target) as photo:
-            if photo.size != (1024, 1024):
-                raise ValueError(f"Unexpected source dimensions: {entry['name']}")
+        if entry["name"] != "environment":
+            with Image.open(target) as photo:
+                if photo.size != (1024, 1024):
+                    raise ValueError(f"Unexpected source dimensions: {entry['name']}")
 
     sdk_archive = CACHE / "filament-host-1.78.1.tgz"
     download(HOST_URL, sdk_archive, HOST_SHA256)
