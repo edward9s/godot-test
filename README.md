@@ -4,12 +4,12 @@ Godot rendering of the same deterministic forest-ruins geometry used by [filamen
 
 ## Prepare scene
 
-Requires Linux x86-64, Python 3.11+, `g++`, `curl`, `tar`, Pillow, and Godot 4.5.2. Generated assets are deliberately excluded from git.
+Requires Linux x86-64, Python 3.11+, `g++`, `curl`, `tar`, Pillow, and Godot 4.7.2. Generated assets are deliberately excluded from git.
 
 ```sh
 python3 -m pip install Pillow==11.3.0
 python3 scripts/prepare_scene.py
-# Open project.godot in Godot 4.5.2, or run:
+# Open project.godot in Godot 4.7.2, or run:
 godot --headless --path . --editor --import --quit
 ```
 

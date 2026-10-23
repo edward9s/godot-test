@@ -31,10 +31,10 @@ jobs:
           yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
           "$sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Install Godot 4.5.2 and Android export templates
+      - name: Install Godot 4.7.2 and Android export templates
         run: |
           set -euo pipefail
-          version=4.5.2
+          version=4.7.2
           base="https://github.com/godotengine/godot/releases/download/$version-stable"
           curl -fLsS --retry 3 "$base/Godot_v$version-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP"
@@ -122,7 +122,7 @@ jobs:
           tag="test-build"
           apk="build/GodotForest-test-arm64.apk"
           notes="Latest successful Godot forest build #$GITHUB_RUN_NUMBER, commit $GITHUB_SHA.
-          Exact geometry from filament-test, Godot 4.5.2 release-signed arm64 APK.
+          Exact geometry from filament-test, Godot 4.7.2 release-signed arm64 APK.
           Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
