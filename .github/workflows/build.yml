@@ -68,6 +68,44 @@ jobs:
           "$RUNNER_TEMP/godot" --headless --path . --editor --import --quit
           find .godot/imported -name '*forest.glb*' -print | grep -q .
 
+      - name: Validate effects and scene runtime
+        run: |
+          set -euo pipefail
+          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_effects.gd 2>&1 | tee "$RUNNER_TEMP/effects.log"
+          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_scene.gd 2>&1 | tee "$RUNNER_TEMP/scene.log"
+          grep -F 'Effects passed:' "$RUNNER_TEMP/effects.log"
+          grep -F 'Scene passed:' "$RUNNER_TEMP/scene.log"
+          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/effects.log" "$RUNNER_TEMP/scene.log"; then
+            exit 1
+          fi
+
+      - name: Validate Vulkan stability and GPU uploads
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers xvfb xauth
+          export VK_ICD_FILENAMES="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
+          test -s "$VK_ICD_FILENAMES"
+          for renderer in mobile forward_plus; do
+            scene_log="$RUNNER_TEMP/vulkan-$renderer-scene.log"
+            effects_log="$RUNNER_TEMP/vulkan-$renderer-effects.log"
+            timeout 60s xvfb-run -a "$RUNNER_TEMP/godot" --path . --rendering-driver vulkan \
+              --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_scene.gd \
+              2>&1 | tee "$scene_log"
+            grep -F 'Scene passed:' "$scene_log"
+            timeout 300s xvfb-run -a "$RUNNER_TEMP/godot" --path . --rendering-driver vulkan \
+              --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd \
+              -- effects 3600 "$renderer" 2>&1 | tee "$effects_log"
+            timeout 600s xvfb-run -a "$RUNNER_TEMP/godot" --path . --rendering-driver vulkan \
+              --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd \
+              -- scene 180 "$renderer" 2>&1 | tee -a "$scene_log"
+            grep -F 'Stability passed: effects 3600' "$effects_log"
+            grep -F 'Stability passed: scene 180' "$scene_log"
+            if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$effects_log" "$scene_log"; then
+              exit 1
+            fi
+          done
+
       - name: Restore configured signing key (no new identity)
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -122,7 +160,8 @@ jobs:
           tag="test-build"
           apk="build/GodotForest-test-arm64.apk"
           notes="Latest successful Godot forest build #$GITHUB_RUN_NUMBER, commit $GITHUB_SHA.
-          Exact geometry from filament-test, Godot 4.7.2 release-signed arm64 APK.
+          Exact geometry from filament-test, Godot 4.7.2 release-signed arm64 APK, version 0.1.1.
+          Android uses Mobile to avoid the reported Forward+ Vulkan device-loss crash.
           Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
@@ -140,3 +179,4 @@ jobs:
       - name: Remove key files
         if: always()
         run: rm -f "$RUNNER_TEMP/source.jks" "$RUNNER_TEMP/release.p12"
+

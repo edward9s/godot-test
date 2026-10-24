@@ -2,6 +2,10 @@
 
 Godot rendering of the same deterministic forest-ruins geometry used by [filament-test](https://github.com/edward9s/filament-test). The stone arches, forest, path, camera target, and source Poly Haven textures are carried across; lighting and tone mapping are engine-specific and cannot be pixel identical.
 
+![Actual Godot Forward+ render](docs/forest-preview.jpg)
+
+Actual 1280×720 Vulkan render on Linux llvmpipe. The displayed FPS is software rendering performance, not an Android measurement.
+
 ## Prepare scene
 
 Requires Linux x86-64, Python 3.11+, `g++`, `curl`, `tar`, Pillow, and Godot 4.7.2. Generated assets are deliberately excluded from git.
@@ -13,7 +17,7 @@ python3 scripts/prepare_scene.py
 godot --headless --path . --editor --import --quit
 ```
 
-The preparation script downloads SHA-256-verified CC0 Poly Haven imagery and the matching Filament 1.78.1 host SDK headers, compiles the **unmodified** `Geometry.cpp` from filament-test, and exports its deterministic ~230 spatial/material batches into a textured glTF binary. No native Filament code or SDL is shipped in the APK.
+The preparation script downloads SHA-256-verified CC0 Poly Haven imagery and the matching Filament 1.78.1 host SDK headers, compiles the **unmodified** `Geometry.cpp` from filament-test's effects branch (`4d884ac5`), and exports its deterministic 232 spatial/material batches into a textured glTF binary. This includes the spring rock and vegetation clearance around the flowing water. No native Filament code or SDL is shipped in the APK.
 
 ## Android
 
@@ -21,7 +25,50 @@ Use **Actions → Android test build → Run workflow** to generate a signed arm
 
 ## Scene and controls
 
-The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`), including cascaded dynamic shadows. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. FPS is overlaid at top-left. Godot Mobile renderer is used for Android with ETC2/ASTC-compressed textures, PBR, HDR sky, glow, fog and cascaded sun shadows. Mobile does not support Forward+-only SSAO or TAA; MSAA remains enabled. Canopy and leaf wind vertex animation is preserved exactly from the original Filament port, including animated shadow casters. Directional shadow atlas size is explicitly set to 4096 on **Android** (otherwise Godot's `.mobile` override drops it to 2048), and Mobile PCF filtering is raised from its lowest override to quality 2. Four cascades blend with a 48 m range. These improve resolution and filtering without freezing or hiding moving foliage shadows; GPU cost rises and visual stability still requires device testing. Warm sunlight is reduced from 3.5 to 2.2, HDR sky ambient light from 0.85 to 0.60, sky background intensity to 0.80 and camera exposure to 0.82 for a more subdued forest appearance. These are starting calibration values, not a measured color match. Actual Android performance depends on the device.
+The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`); linear source light colors are converted to Godot’s sRGB light properties. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. FPS and the active rendering method are overlaid at top-left.
+
+Desktop uses **Forward+** for SSAO, TAA and PCSS sun shadows. Android uses **Mobile**, with 2× MSAA and PCF shadows. SSAO, TAA and angular PCSS are explicitly disabled when the active renderer is Mobile; this is a visible quality tradeoff, not equivalent output. On Forward+, SSAO uses the source's 0.75 m radius and 1.2 power, and TAA combines with 2× MSAA. Both renderers use the HDRI for diffuse ambient lighting and filtered reflections. Four blended shadow cascades cover 48 m using a 4096 atlas, including the Android override; split distances are 12%, 38% and 65%. Bias is explicitly 0.03 and normal bias 0.35, avoiding the default large normal offset that loses contact shadows on small leaves. On Forward+, PCSS uses a 1.06° angular diameter corresponding to the source's 0.53° solar radius. Shadow filter quality remains 2 on both platforms.
+
+Imported ground, stone and bark materials explicitly enable the generator's linear vertex colors. Godot 4.7.2 leaves this material flag off after glTF import, losing the source tints and surface variation.
+
+All original canopy and leaf wind deformation remains enabled in the color and shadow passes. Foliage casts double-sided shadows with a 0.12 m culling margin for wind. Back faces have corrected normals and a modest backlight term approximates the source's leaf transmission. Sky energy (0.50), ambient multiplier (0.18), warm sunlight (1.1), ACES tone mapping and fixed camera exposure (0.65) aim for a quieter forest rather than a washed-out clearing. Glow and distance fog remain enabled. Android still requires Vulkan. Retest stability and compare image quality on the physical device; a software Vulkan test cannot validate an Adreno driver.
+
+## Android Vulkan crash
+
+The supplied SM-X700 log reports compute-pipeline creation failure (`VkResult -13`), followed by Vulkan device loss and an intentional Godot SIGTRAP after 26 seconds. The log identifies the rendering failure but does not name the failed shader or prove the cause of device loss. Upstream [#124406](https://github.com/godotengine/godot/issues/124406) reports a similar startup error on another Android 16 Adreno device with Godot 4.7.2, and reports that Mobile avoids it; that report remains unconfirmed by maintainers and does not prove an identical defect on this tablet.
+
+Version 0.1.1 switches Android back to its original Mobile rendering path, avoiding Forward+-only internal pipelines. Desktop Forward+ remains available. All five effects, animated foliage, source geometry, material AO/normal maps, 4096 shadow atlas, four shadow cascades, HDRI, exposure, glow and fog remain. The FPS overlay identifies the active renderer. This is a renderer workaround requiring SM-X700 retesting, not an engine/driver fix or a claim of matching Filament quality.
+
+The manual build checks both Vulkan renderers, with scene/material checks, 3,600 effect frames, 180 full-scene frames, stable buffer identities, bounded memory and GPU readback. Release signing still uses the configured repository secrets.
+
+## Effects
+
+The five displays follow [filament-test PR #4](https://github.com/edward9s/filament-test/pull/4), which was still unmerged when this port was made:
+
+| Display | Position (x, z) | Animation |
+| --- | --- | --- |
+| Fire | −3.2, 3.1 | Continuous flames, rising embers, flickering local light |
+| Explosion | −6.3, −1.6 | Expanding fireball and ballistic sparks every 5.4 seconds |
+| Water | 3.5, 3.5 | Raised spring, tubular jet, shallow flowing sheet and splashes |
+| Lightning | 6.3, −3.2 | Branching double strike every 4.8 seconds with local flash |
+| Smoke | −7.0, −6.2 | Continuous drifting dense column |
+
+`scripts/effects.gd` ports the deterministic seeds, equations, particle counts and sites. Six persistent `ArrayMesh` batches total 583 quads / 1,166 triangles. `scripts/effect_batch.gd` allocates each surface once and updates vertex/attribute buffer regions in place. Animation never clears or recreates GPU surfaces. Fixed bounds cover the entire motion; water normal and tangent buffers update with its geometry. Transparent puffs are sorted back to front for the orbit camera; water uses moving tangent normals, foam and HDR sky reflections. Fire, explosion and lightning animate three nearby point lights. Emission and light energies are calibrated in Godot units. No particle textures, physics or extra asset downloads are required.
+
+Validate after generating and importing assets:
+
+```sh
+python3 scripts/check_scene.py
+godot --headless --path . --script scripts/test_effects.gd
+godot --headless --path . --script scripts/test_scene.gd
+# Continuous Vulkan rendering; fail on growing memory or incorrect GPU uploads:
+for renderer in mobile forward_plus; do
+  godot --path . --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd -- effects 3600 "$renderer"
+  godot --path . --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd -- scene 180 "$renderer"
+done
+# Actual framebuffer capture, with a Vulkan display:
+godot --path . --script scripts/render_preview.gd -- /tmp/godot-effects.png 0.3
+```
 
 ## Differences from Filament
 
@@ -29,4 +76,5 @@ Godot and Filament implement PBR response, IBL filtering, exposure, antialiasing
 
 ## Asset credits
 
-Poly Haven forest ground, mossy rock, bark, pine canopy and forest HDR: see `assets/CREDITS.md` and the hash manifest `assets/sources.json` (CC0 1.0). `vendor/Geometry.cpp` and `vendor/Geometry.h` originate from the owner's filament-test repository.
+Poly Haven forest ground, mossy rock, bark, pine canopy and forest HDR: see `assets/CREDITS.md` and the hash manifest `assets/sources.json` (CC0 1.0). `vendor/Geometry.cpp`, `vendor/Geometry.h`, and the ported effects equations/shaders originate from the owner's filament-test repository.
+
