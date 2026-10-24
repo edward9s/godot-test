@@ -73,9 +73,13 @@ jobs:
           set -euo pipefail
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_effects.gd 2>&1 | tee "$RUNNER_TEMP/effects.log"
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_scene.gd 2>&1 | tee "$RUNNER_TEMP/scene.log"
+          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_resolution.gd 2>&1 | tee "$RUNNER_TEMP/resolution.log"
+          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/bench_effects.gd 2>&1 | tee "$RUNNER_TEMP/bench.log"
           grep -F 'Effects passed:' "$RUNNER_TEMP/effects.log"
           grep -F 'Scene passed:' "$RUNNER_TEMP/scene.log"
-          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/effects.log" "$RUNNER_TEMP/scene.log"; then
+          grep -F 'Resolution passed:' "$RUNNER_TEMP/resolution.log"
+          grep -F 'Benchmark effects: median=' "$RUNNER_TEMP/bench.log"
+          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/effects.log" "$RUNNER_TEMP/scene.log" "$RUNNER_TEMP/resolution.log" "$RUNNER_TEMP/bench.log"; then
             exit 1
           fi
 
@@ -101,7 +105,12 @@ jobs:
               -- scene 180 "$renderer" 2>&1 | tee -a "$scene_log"
             grep -F 'Stability passed: effects 3600' "$effects_log"
             grep -F 'Stability passed: scene 180' "$scene_log"
-            if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$effects_log" "$scene_log"; then
+            scale_log="$RUNNER_TEMP/vulkan-$renderer-scale.log"
+            timeout 180s xvfb-run -a "$RUNNER_TEMP/godot" --path . --rendering-driver vulkan \
+              --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_render_scale.gd \
+              2>&1 | tee "$scale_log"
+            grep -F 'Render scale passed:' "$scale_log"
+            if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$effects_log" "$scene_log" "$scale_log"; then
               exit 1
             fi
           done
@@ -160,8 +169,9 @@ jobs:
           tag="test-build"
           apk="build/GodotForest-test-arm64.apk"
           notes="Latest successful Godot forest build #$GITHUB_RUN_NUMBER, commit $GITHUB_SHA.
-          Exact geometry from filament-test, Godot 4.7.2 release-signed arm64 APK, version 0.1.1.
+          Exact geometry from filament-test, Godot 4.7.2 release-signed arm64 APK, version 0.1.2.
           Android uses Mobile to avoid the reported Forward+ Vulkan device-loss crash.
+          Indexed effect buffers and cached geometry; tap FPS to compare Auto 65-100% against Native 100%.
           Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"

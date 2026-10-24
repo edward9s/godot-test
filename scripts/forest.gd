@@ -6,6 +6,7 @@ const CANOPY_IMAGE := preload("res://assets/generated/canopy.png")
 const LEAVES_SHADER := preload("res://shaders/leaves.gdshader")
 const CANOPY_SHADER := preload("res://shaders/canopy.gdshader")
 const EFFECTS := preload("res://scripts/effects.gd")
+const Resolution := preload("res://scripts/resolution.gd")
 const TARGET := Vector3(0.0, 1.6, -3.0)
 const SUN_DIRECTION := Vector3(-0.32, -0.82, -0.47)
 
@@ -14,22 +15,27 @@ var pitch := 0.12
 var distance := 13.0
 var touches: Dictionary = {}
 var camera: Camera3D
-var fps_label: Label
+@export var adaptive_resolution := true
+var resolution := Resolution.new()
+var fps_button: Button
 var fps_elapsed := 0.0
+var gpu_ms := 0.0
 
 func _ready() -> void:
     # Also respect a renderer selected explicitly with --rendering-method.
     get_viewport().use_taa = RenderingServer.get_current_rendering_method() == "forward_plus"
+    resolution.set_enabled(adaptive_resolution and RenderingServer.get_current_rendering_method() == "mobile")
+    RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
     _create_environment()
     _create_sun()
     _create_scene()
     _create_camera()
-    _create_fps()
     _update_camera()
     var effects := EFFECTS.new()
     effects.name = "Effects"
     add_child(effects)
     effects.animate(0.0, camera.global_position)
+    _create_fps()
 
 func _create_scene() -> void:
     var forest := FOREST.instantiate()
@@ -134,21 +140,44 @@ func _create_fps() -> void:
     var overlay := CanvasLayer.new()
     overlay.name = "FPSOverlay"
     add_child(overlay)
-    fps_label = Label.new()
-    fps_label.position = Vector2(12.0, 12.0)
-    fps_label.add_theme_font_size_override("font_size", 21)
-    fps_label.add_theme_color_override("font_color", Color.WHITE)
-    fps_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
-    fps_label.add_theme_constant_override("shadow_offset_x", 2)
-    fps_label.add_theme_constant_override("shadow_offset_y", 2)
-    fps_label.text = "FPS: -- | " + RenderingServer.get_current_rendering_method()
-    overlay.add_child(fps_label)
+    fps_button = Button.new()
+    fps_button.position = Vector2(12.0, 12.0)
+    fps_button.flat = true
+    fps_button.focus_mode = Control.FOCUS_NONE
+    fps_button.add_theme_font_size_override("font_size", 21)
+    fps_button.add_theme_color_override("font_color", Color.WHITE)
+    fps_button.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+    fps_button.add_theme_constant_override("outline_size", 4)
+    fps_button.pressed.connect(_toggle_resolution)
+    overlay.add_child(fps_button)
+    _update_fps()
+
+func _toggle_resolution() -> void:
+    resolution.set_enabled(not resolution.enabled)
+    adaptive_resolution = resolution.enabled
+    get_viewport().scaling_3d_scale = 1.0
+    _update_fps()
+
+func _update_fps() -> void:
+    var viewport := get_viewport()
+    var render_ms := RenderingServer.viewport_get_measured_render_time_cpu(viewport.get_viewport_rid())
+    var effect_ms: float = get_node("Effects").update_ms
+    var mode := "Auto" if resolution.enabled else "Native"
+    var gpu := "--" if gpu_ms == 0.0 else "%.1f" % gpu_ms
+    fps_button.text = "FPS: %d | %s | %s %d%% (tap)\nRender CPU: %.1f ms | GPU: %s ms | Effects: %.1f ms" % [
+        Engine.get_frames_per_second(), RenderingServer.get_current_rendering_method(), mode,
+        roundi(viewport.scaling_3d_scale * 100.0), render_ms, gpu, effect_ms]
 
 func _process(delta: float) -> void:
+    var viewport := get_viewport()
+    gpu_ms = RenderingServer.viewport_get_measured_render_time_gpu(viewport.get_viewport_rid())
+    var scale := resolution.sample(delta, gpu_ms)
+    if not is_equal_approx(viewport.scaling_3d_scale, scale):
+        viewport.scaling_3d_scale = scale
     fps_elapsed += delta
     if fps_elapsed >= 0.5:
         fps_elapsed = 0.0
-        fps_label.text = "FPS: %d | %s" % [Engine.get_frames_per_second(), RenderingServer.get_current_rendering_method()]
+        _update_fps()
 
 func _update_camera() -> void:
     var horizontal := distance * cos(pitch)
