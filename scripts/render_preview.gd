@@ -7,6 +7,7 @@ func _render() -> void:
     var args := OS.get_cmdline_user_args()
     assert(args.size() == 2, "Expected output PNG path and scene time")
     var scene := load("res://scenes/main.tscn").instantiate() as Node3D
+    scene.adaptive_resolution = false # Screenshots compare at the same native resolution.
     root.add_child(scene)
     var effects := scene.get_node("Effects")
     effects.set_process(false)

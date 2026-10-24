@@ -26,6 +26,7 @@ func _setup() -> void:
     root.size = Vector2i(640, 360) if mode == "scene" else Vector2i(320, 180)
     if mode == "scene":
         scene = load("res://scenes/main.tscn").instantiate()
+        scene.adaptive_resolution = false # Keep GPU validation at a fixed native resolution.
         root.add_child(scene)
         effects = scene.get_node("Effects")
         assert(root.use_taa == (args[2] == "forward_plus"))
@@ -74,6 +75,7 @@ func _check_uploads() -> bool:
         var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
         var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
         var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+        assert(arrays[Mesh.ARRAY_INDEX] == batch.indices)
         for i in range(vertices.size()):
             assert(vertices[i].distance_to(batch.vertices[i]) < 0.0001)
             assert(uvs[i].distance_to(batch.uvs[i]) < 0.0001)

@@ -25,7 +25,7 @@ Use **Actions → Android test build → Run workflow** to generate a signed arm
 
 ## Scene and controls
 
-The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`); linear source light colors are converted to Godot’s sRGB light properties. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. FPS and the active rendering method are overlaid at top-left.
+The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`); linear source light colors are converted to Godot’s sRGB light properties. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. The top-left FPS button shows the active renderer, actual 3D resolution percentage, render CPU/GPU time and effect-update CPU time. Tap it to switch between Auto resolution and Native 100%. The timing values are separate measurements, not total CPU frame time.
 
 Desktop uses **Forward+** for SSAO, TAA and PCSS sun shadows. Android uses **Mobile**, with 2× MSAA and PCF shadows. SSAO, TAA and angular PCSS are explicitly disabled when the active renderer is Mobile; this is a visible quality tradeoff, not equivalent output. On Forward+, SSAO uses the source's 0.75 m radius and 1.2 power, and TAA combines with 2× MSAA. Both renderers use the HDRI for diffuse ambient lighting and filtered reflections. Four blended shadow cascades cover 48 m using a 4096 atlas, including the Android override; split distances are 12%, 38% and 65%. Bias is explicitly 0.03 and normal bias 0.35, avoiding the default large normal offset that loses contact shadows on small leaves. On Forward+, PCSS uses a 1.06° angular diameter corresponding to the source's 0.53° solar radius. Shadow filter quality remains 2 on both platforms.
 
@@ -37,9 +37,17 @@ All original canopy and leaf wind deformation remains enabled in the color and s
 
 The supplied SM-X700 log reports compute-pipeline creation failure (`VkResult -13`), followed by Vulkan device loss and an intentional Godot SIGTRAP after 26 seconds. The log identifies the rendering failure but does not name the failed shader or prove the cause of device loss. Upstream [#124406](https://github.com/godotengine/godot/issues/124406) reports a similar startup error on another Android 16 Adreno device with Godot 4.7.2, and reports that Mobile avoids it; that report remains unconfirmed by maintainers and does not prove an identical defect on this tablet.
 
-Version 0.1.1 switches Android back to its original Mobile rendering path, avoiding Forward+-only internal pipelines. Desktop Forward+ remains available. All five effects, animated foliage, source geometry, material AO/normal maps, 4096 shadow atlas, four shadow cascades, HDRI, exposure, glow and fog remain. The FPS overlay identifies the active renderer. This is a renderer workaround requiring SM-X700 retesting, not an engine/driver fix or a claim of matching Filament quality.
+Version 0.1.1 switches Android back to its original Mobile rendering path, avoiding Forward+-only internal pipelines. Desktop Forward+ remains available. All five effects, animated foliage, source geometry, material AO/normal maps, 4096 shadow atlas, four shadow cascades, HDRI, exposure, glow and fog remain. The FPS overlay identifies the active renderer. The device owner confirmed that version 0.1.1 runs after this change. This is a renderer workaround, not an engine/driver fix or a claim of matching Filament quality.
 
 The manual build checks both Vulkan renderers, with scene/material checks, 3,600 effect frames, 180 full-scene frames, stable buffer identities, bounded memory and GPU readback. Release signing still uses the configured repository secrets.
+
+## Performance (0.1.2)
+
+Each effect quad now shares four vertices across the same two indexed triangles: 2,332 vertices instead of 3,498, with all 583 quads / 1,166 triangles retained. Maximum dynamic position/normal/attribute uploads fall from 96,624 to 64,416 bytes per update, excluding the index buffers uploaded once. Terrain heights, jet paths, ring directions and UVs are cached. The water sheet evaluates each of its 91 shared points once per update, rather than 288 times. Explosion and lightning batches stop updating/drawing only when their entire batch falls below the fragment shader's existing alpha cutoff; they resume from the current timeline when visible again. A zero-energy lightning light is also hidden. Source shaders, all five effects, vegetation wind, geometry density, textures, MSAA and shadow quality are retained.
+
+On the same Linux host and official Godot 4.7.2, two alternating before/after headless benchmark pairs measured per-run medians of **2.82–2.87 ms → 1.41–1.45 ms per effect update**, approximately 50% less effect CPU time. Each run measures five complete 324-update (5.4-second) cycles after warm-up. This is not a whole-frame speedup, GPU benchmark or SM-X700 FPS estimate. Expanding the indexed buffers and comparing 24 time/view samples against the previous implementation preserved every visible position, color, UV, normal and tangent; the maximum measured position difference was zero.
+
+Filament's reference enables dynamic resolution at 65–100% per axis. Android now uses the same range, adapting to measured GPU time around a 60 FPS budget. A 0.65 scale draws 42.25% as many 3D pixels and reduces sharpness; the HUD stays at native resolution. The controller uses startup/resize settling intervals, minimum sample counts and separate down/up thresholds. A CPU/VSync slowdown alone does not lower resolution, and a GPU timer reporting zero leaves the scale unchanged. Desktop starts in Native mode. Tap the FPS button for **Native 100%** when comparing image quality or benchmarking at equal resolution. Shadow maps and effect counts do not scale down. Physical-device FPS and visual comparison remain necessary.
 
 ## Effects
 
@@ -53,7 +61,7 @@ The five displays follow [filament-test PR #4](https://github.com/edward9s/filam
 | Lightning | 6.3, −3.2 | Branching double strike every 4.8 seconds with local flash |
 | Smoke | −7.0, −6.2 | Continuous drifting dense column |
 
-`scripts/effects.gd` ports the deterministic seeds, equations, particle counts and sites. Six persistent `ArrayMesh` batches total 583 quads / 1,166 triangles. `scripts/effect_batch.gd` allocates each surface once and updates vertex/attribute buffer regions in place. Animation never clears or recreates GPU surfaces. Fixed bounds cover the entire motion; water normal and tangent buffers update with its geometry. Transparent puffs are sorted back to front for the orbit camera; water uses moving tangent normals, foam and HDR sky reflections. Fire, explosion and lightning animate three nearby point lights. Emission and light energies are calibrated in Godot units. No particle textures, physics or extra asset downloads are required.
+`scripts/effects.gd` ports the deterministic seeds, equations, particle counts and sites. Six persistent indexed `ArrayMesh` batches total 583 quads / 1,166 triangles. `scripts/effect_batch.gd` allocates each surface once and updates vertex/attribute buffer regions in place. Animation never clears or recreates GPU surfaces. Fixed bounds cover the entire motion; water normal and tangent buffers update with its geometry. Transparent puffs are sorted back to front for the orbit camera; water uses moving tangent normals, foam and HDR sky reflections. Fire, explosion and lightning animate three nearby point lights. Emission and light energies are calibrated in Godot units. No particle textures, physics or extra asset downloads are required.
 
 Validate after generating and importing assets:
 
@@ -61,10 +69,14 @@ Validate after generating and importing assets:
 python3 scripts/check_scene.py
 godot --headless --path . --script scripts/test_effects.gd
 godot --headless --path . --script scripts/test_scene.gd
+godot --headless --path . --script scripts/test_resolution.gd
+# CPU-only repeatable effect benchmark, independent of dynamic resolution:
+godot --headless --path . --script scripts/bench_effects.gd
 # Continuous Vulkan rendering; fail on growing memory or incorrect GPU uploads:
 for renderer in mobile forward_plus; do
   godot --path . --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd -- effects 3600 "$renderer"
   godot --path . --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_stability.gd -- scene 180 "$renderer"
+  godot --path . --rendering-method "$renderer" --audio-driver Dummy --script scripts/test_render_scale.gd
 done
 # Actual framebuffer capture, with a Vulkan display:
 godot --path . --script scripts/render_preview.gd -- /tmp/godot-effects.png 0.3

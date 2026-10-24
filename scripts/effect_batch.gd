@@ -4,6 +4,8 @@ extends RefCounted
 
 var mesh := ArrayMesh.new()
 var vertices := PackedVector3Array()
+var indices := PackedInt32Array()
+var initialized := false
 var colors := PackedColorArray()
 var uvs := PackedVector2Array()
 var normals := PackedVector3Array()
@@ -17,7 +19,11 @@ var lit: bool
 func _init(quads: int, shader: Material, bounds: AABB, lighting: bool) -> void:
     material = shader
     lit = lighting
-    var count := quads * 6
+    var count := quads * 4
+    indices.resize(quads * 6)
+    for quad in range(quads):
+        for i in range(6):
+            indices[quad * 6 + i] = quad * 4 + [0, 1, 2, 0, 2, 3][i]
     vertices.resize(count)
     colors.resize(count)
     uvs.resize(count)
@@ -32,7 +38,7 @@ func begin() -> void:
     cursor = 0
 
 func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, color: Color, uv: Rect2) -> void:
-    assert(cursor + 6 <= vertices.size(), "Effect topology exceeded its fixed buffer")
+    assert(cursor + 4 <= vertices.size(), "Effect topology exceeded its fixed buffer")
     var rgba := int(clampf(color.r * 255.0, 0, 255)) | (int(clampf(color.g * 255.0, 0, 255)) << 8) \
         | (int(clampf(color.b * 255.0, 0, 255)) << 16) | (int(clampf(color.a * 255.0, 0, 255)) << 24)
     var normal := Vector3.UP
@@ -49,35 +55,43 @@ func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, color: Color, uv: Rect
         packed_tangent = _oct(oct)
         if packed_tangent == 0xffff0000:
             packed_tangent = 0xffffffff
-    # Source winding is CCW; Godot front faces are clockwise.
-    var points := [a, d, c, a, c, b]
-    var texcoords := [uv.position, Vector2(uv.position.x, uv.end.y), uv.end,
-        uv.position, uv.end, Vector2(uv.end.x, uv.position.y)]
-    for i in range(6):
-        vertices[cursor] = points[i]
-        colors[cursor] = color
-        uvs[cursor] = texcoords[i]
-        var offset := cursor * 12
-        attributes.encode_u32(offset, rgba)
-        attributes.encode_float(offset + 4, texcoords[i].x)
-        attributes.encode_float(offset + 8, texcoords[i].y)
+    # Four shared corners retain the same two clockwise triangles.
+    vertices[cursor] = a
+    vertices[cursor + 1] = d
+    vertices[cursor + 2] = c
+    vertices[cursor + 3] = b
+    if not initialized:
+        uvs[cursor] = uv.position
+        uvs[cursor + 1] = Vector2(uv.position.x, uv.end.y)
+        uvs[cursor + 2] = uv.end
+        uvs[cursor + 3] = Vector2(uv.end.x, uv.position.y)
+        for i in range(cursor, cursor + 4):
+            attributes.encode_float(i * 12 + 4, uvs[i].x)
+            attributes.encode_float(i * 12 + 8, uvs[i].y)
+    else:
+        assert(uvs[cursor] == uv.position and uvs[cursor + 2] == uv.end, "Fixed effect UVs changed")
+    for i in range(cursor, cursor + 4):
+        colors[i] = color
+        attributes.encode_u32(i * 12, rgba)
         if lit:
-            normals[cursor] = normal
-            for axis in range(3):
-                tangents[cursor * 4 + axis] = tangent[axis]
-            tangents[cursor * 4 + 3] = -1.0
-            orientations.encode_u32(cursor * 8, packed_normal)
-            orientations.encode_u32(cursor * 8 + 4, packed_tangent)
-        cursor += 1
+            normals[i] = normal
+            tangents[i * 4] = tangent.x
+            tangents[i * 4 + 1] = tangent.y
+            tangents[i * 4 + 2] = tangent.z
+            tangents[i * 4 + 3] = -1.0
+            orientations.encode_u32(i * 8, packed_normal)
+            orientations.encode_u32(i * 8 + 4, packed_tangent)
+    cursor += 4
 
 static func _oct(value: Vector2) -> int:
     return int(clampf(value.x * 65535.0, 0, 65535)) | (int(clampf(value.y * 65535.0, 0, 65535)) << 16)
 
 func upload() -> void:
     assert(cursor == vertices.size(), "Effect topology did not fill its fixed buffer")
-    if mesh.get_surface_count() == 0:
+    if not initialized:
         var arrays: Array = []
         arrays.resize(Mesh.ARRAY_MAX)
+        arrays[Mesh.ARRAY_INDEX] = indices
         arrays[Mesh.ARRAY_VERTEX] = vertices
         arrays[Mesh.ARRAY_COLOR] = colors
         arrays[Mesh.ARRAY_TEX_UV] = uvs
@@ -96,6 +110,7 @@ func upload() -> void:
             assert(RenderingServer.mesh_surface_get_format_normal_tangent_stride(format, count) == 8)
             assert(RenderingServer.mesh_surface_get_format_offset(format, count, Mesh.ARRAY_NORMAL) == count * 12)
             assert(RenderingServer.mesh_surface_get_format_offset(format, count, Mesh.ARRAY_TANGENT) == count * 12 + 4)
+        initialized = true
     else:
         mesh.surface_update_vertex_region(0, 0, vertices.to_byte_array())
         if lit:

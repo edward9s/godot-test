@@ -16,24 +16,30 @@ func _test() -> void:
             var batch = effects.batches[kind]
             assert(batch.mesh.get_surface_count() == 1)
             var vertices: PackedVector3Array = batch.vertices
-            assert(vertices.size() == Effects.COUNTS[kind] * 6)
+            assert(vertices.size() == Effects.COUNTS[kind] * 4)
+            var indices: PackedInt32Array = batch.indices
+            assert(indices.size() == Effects.COUNTS[kind] * 6)
             for vertex in vertices:
                 assert(vertex.is_finite())
-            for i in range(0, vertices.size(), 3):
-                assert((vertices[i + 1] - vertices[i]).cross(vertices[i + 2] - vertices[i]).length() > 0.000001)
+            for i in range(0, indices.size(), 3):
+                assert((vertices[indices[i + 1]] - vertices[indices[i]]).cross(
+                    vertices[indices[i + 2]] - vertices[indices[i]]).length() > 0.000001)
         assert(effects.lights[0].light_energy > 0.0)
     effects.animate(1.8, eye)
-    var before := effects.batches[0].vertices as PackedVector3Array
+    var before := effects.batches[0].vertices.duplicate() as PackedVector3Array
     effects.animate(1.8, eye)
     assert(before == effects.batches[0].vertices)
     effects.animate(1.9, eye)
     assert(before != effects.batches[0].vertices)
-    # At idle, explosion and lightning particles must be fully transparent.
+    # Fully discarded effects must not submit a draw or upload stale geometry.
     effects.animate(3.0, eye)
     for kind in [Effects.Kind.BLAST, Effects.Kind.LIGHTNING]:
-        var colors: PackedColorArray = effects.batches[kind].colors
-        for color in colors:
-            assert(color.a < 0.003)
+        assert(not effects.instances[kind].visible)
+        assert(effects.batches[kind].cursor == 0)
+    effects.animate(0.3, eye)
+    for kind in [Effects.Kind.BLAST, Effects.Kind.LIGHTNING]:
+        assert(effects.instances[kind].visible)
+        assert(effects.batches[kind].cursor == effects.batches[kind].vertices.size())
     assert(Effects.lightning_pulse(0.12) > 0.99)
     assert(Effects.lightning_pulse(1.8) < 0.003)
     assert(absf(Effects.blast_age(5.4)) < 0.000001)
@@ -50,9 +56,10 @@ func _test() -> void:
     var winding := [0, 3, 2, 0, 2, 1]
     for kind in range(6):
         var positions: PackedVector3Array = effects.batches[kind].vertices
+        var indices: PackedInt32Array = effects.batches[kind].indices
         for i in range(6):
             var p: Array = reference[kind][winding[i]]
-            assert(positions[i].distance_to(Vector3(p[0], p[1], p[2])) < 0.001)
+            assert(positions[indices[i]].distance_to(Vector3(p[0], p[1], p[2])) < 0.001)
     effects.queue_free()
     print("Effects passed: topology, finite geometry, loop boundaries, determinism, timing, seeds and sites")
     quit()

@@ -14,6 +14,14 @@ var batches: Array[Batch] = []
 var materials: Array[ShaderMaterial] = []
 var lights: Array[OmniLight3D] = []
 var seconds := 0.0
+var update_ms := 0.0
+var instances: Array[MeshInstance3D] = []
+var origins := PackedVector3Array()
+var jet := PackedVector3Array()
+var sides := PackedVector3Array()
+var ups := PackedVector3Array()
+var ring := PackedVector2Array()
+var water_points := PackedVector3Array()
 
 static func origin(kind: int) -> Vector3:
     var site: Vector2 = SITES[kind]
@@ -37,22 +45,36 @@ static func lightning_pulse(time: float) -> float:
 
 func _ready() -> void:
     for kind in range(6):
+        origins.append(origin(kind))
+    for i in range(25):
+        jet.append(_jet(i))
+    for i in range(24):
+        var tangent := (jet[i + 1] - jet[i]).normalized()
+        var side := tangent.cross(Vector3.RIGHT).normalized()
+        sides.append(side)
+        ups.append(tangent.cross(side))
+    for i in range(8):
+        var angle := TAU * i / 8.0
+        ring.append(Vector2(cos(angle), sin(angle)))
+    water_points.resize(7 * 13)
+    for kind in range(6):
         var material := ShaderMaterial.new()
         material.shader = WATER if kind == Kind.WATER else PARTICLES
         if kind != Kind.WATER:
             material.set_shader_parameter("kind", kind)
         materials.append(material)
-        var bounds := AABB(origin(kind) - Vector3(8, 1, 8), Vector3(16, 24, 16))
+        var bounds := AABB(origins[kind] - Vector3(8, 1, 8), Vector3(16, 24, 16))
         var batch := Batch.new(COUNTS[kind], material, bounds, kind == Kind.WATER)
         batches.append(batch)
         var instance := MeshInstance3D.new()
         instance.name = Kind.keys()[kind]
+        instances.append(instance)
         instance.mesh = batch.mesh
         instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         add_child(instance)
     for kind in [Kind.FIRE, Kind.BLAST, Kind.LIGHTNING]:
         var light := OmniLight3D.new()
-        light.position = origin(kind) + Vector3.UP
+        light.position = origins[kind] + Vector3.UP
         light.omni_range = 6.0
         light.shadow_enabled = false
         light.light_volumetric_fog_energy = 0.0
@@ -63,7 +85,9 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
     seconds += delta
+    var start := Time.get_ticks_usec()
     animate(seconds, get_viewport().get_camera_3d().global_position)
+    update_ms = lerpf(update_ms, float(Time.get_ticks_usec() - start) / 1000.0, 0.1)
 
 func _quad(batch: Batch, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
         color: Color, uv := Rect2(0, 0, 1, 1)) -> void:
@@ -93,18 +117,18 @@ func _ribbon(mesh: Batch, a: Vector3, b: Vector3, width: float, color: Color, ey
 
 func _bolt_point(i: int, strike: int) -> Vector3:
     var end := i == 0 or i == 18
-    return origin(Kind.LIGHTNING) + Vector3(0.0 if end else (random(i + strike * 73 + 891) - 0.5) * 0.8,
+    return origins[Kind.LIGHTNING] + Vector3(0.0 if end else (random(i + strike * 73 + 891) - 0.5) * 0.8,
         5.2 * (1.0 - float(i) / 18.0), 0.0 if end else (random(i + strike * 91 + 477) - 0.5) * 0.5)
 
 func _water_point(x: int, z: int, time: float) -> Vector3:
     var u := float(x) / 6.0
     var v := float(z) / 12.0
-    return origin(Kind.WATER) + Vector3((u - 0.5) * 1.45 + 0.75,
+    return origins[Kind.WATER] + Vector3((u - 0.5) * 1.45 + 0.75,
         -0.085 + 0.012 * sin(v * 25.0 - time * 4.0 + u * 8.0), v * 3.3 + 0.25)
 
 func _jet(i: int) -> Vector3:
     var t := float(i) / 24.0
-    return origin(Kind.WATER) + Vector3(t * 0.75, 1.15 + t * 0.55 - 1.8 * t * t, t * 1.45)
+    return origins[Kind.WATER] + Vector3(t * 0.75, 1.15 + t * 0.55 - 1.8 * t * t, t * 1.45)
 
 func animate(time: float, eye: Vector3) -> void:
     assert(is_finite(time) and time >= 0.0 and eye.is_finite())
@@ -112,7 +136,7 @@ func animate(time: float, eye: Vector3) -> void:
         materials[kind].set_shader_parameter("seconds", time)
         batches[kind].begin()
     var puffs: Array = []
-    var fire := origin(Kind.FIRE)
+    var fire := origins[Kind.FIRE]
     for i in range(54):
         var seed := random(i + 1)
         var age := fmod(time * 0.75 + seed, 1.0)
@@ -131,28 +155,31 @@ func animate(time: float, eye: Vector3) -> void:
     _billboards(batches[Kind.FIRE], puffs, eye)
     puffs.clear()
 
-    var blast := origin(Kind.BLAST)
+    var blast := origins[Kind.BLAST]
     var age := blast_age(time)
     var fade := clampf(1.0 - age / 2.5, 0.0, 1.0)
-    for i in range(72):
-        var angle := random(i + 1301) * TAU
-        var lift := random(i + 701)
-        var radius := sqrt(minf(age, 2.5)) * 1.25
-        var p := blast + Vector3(cos(angle) * radius * (0.35 + lift * 0.65),
-            0.6 + age * (1.4 + lift * 2.6), sin(angle) * radius)
-        var size := 0.2 + minf(age, 2.5) * (0.5 + lift * 0.4)
-        puffs.append([p, size, size, Color(1, 0.1 + 0.3 * fade, 0.012, fade * 0.65)])
-    for i in range(36):
-        var angle := random(i + 4101) * TAU
-        var speed := 1.6 + random(i + 151) * 2.0
-        var t := minf(age, 2.0)
-        var p := blast + Vector3(cos(angle) * t * speed,
-            maxf(0.04, t * (2.5 + random(i + 9) * 2.0) - 2.6 * t * t), sin(angle) * t * speed)
-        puffs.append([p, 0.035, 0.15, Color(1, 0.6, 0.1, clampf(1.0 - age / 1.5, 0.0, 1.0))])
-    _billboards(batches[Kind.BLAST], puffs, eye)
-    puffs.clear()
+    # Every fragment would be discarded below the shader's existing alpha threshold.
+    instances[Kind.BLAST].visible = fade * 0.65 >= 0.003
+    if instances[Kind.BLAST].visible or not batches[Kind.BLAST].initialized:
+        for i in range(72):
+            var angle := random(i + 1301) * TAU
+            var lift := random(i + 701)
+            var radius := sqrt(minf(age, 2.5)) * 1.25
+            var p := blast + Vector3(cos(angle) * radius * (0.35 + lift * 0.65),
+                0.6 + age * (1.4 + lift * 2.6), sin(angle) * radius)
+            var size := 0.2 + minf(age, 2.5) * (0.5 + lift * 0.4)
+            puffs.append([p, size, size, Color(1, 0.1 + 0.3 * fade, 0.012, fade * 0.65)])
+        for i in range(36):
+            var angle := random(i + 4101) * TAU
+            var speed := 1.6 + random(i + 151) * 2.0
+            var t := minf(age, 2.0)
+            var p := blast + Vector3(cos(angle) * t * speed,
+                maxf(0.04, t * (2.5 + random(i + 9) * 2.0) - 2.6 * t * t), sin(angle) * t * speed)
+            puffs.append([p, 0.035, 0.15, Color(1, 0.6, 0.1, clampf(1.0 - age / 1.5, 0.0, 1.0))])
+        _billboards(batches[Kind.BLAST], puffs, eye)
+        puffs.clear()
 
-    var water := origin(Kind.WATER)
+    var water := origins[Kind.WATER]
     for i in range(45):
         var seed := random(i + 2001)
         var t := fmod(time * 1.5 + seed, 1.0)
@@ -162,40 +189,43 @@ func animate(time: float, eye: Vector3) -> void:
             0.04 + 0.08 * t, 0.08 + 0.09 * t, Color(0.6, 0.8, 0.86, (1.0 - t) * 0.75)])
     _billboards(batches[Kind.SPRAY], puffs, eye)
     puffs.clear()
+    for z in range(13):
+        for x in range(7):
+            water_points[z * 7 + x] = _water_point(x, z, time)
     for z in range(12):
         for x in range(6):
-            _quad(batches[Kind.WATER], _water_point(x, z, time), _water_point(x + 1, z, time),
-                _water_point(x + 1, z + 1, time), _water_point(x, z + 1, time), Color(0.065, 0.17, 0.16, 0.62),
+            _quad(batches[Kind.WATER], water_points[z * 7 + x], water_points[z * 7 + x + 1],
+                water_points[(z + 1) * 7 + x + 1], water_points[(z + 1) * 7 + x], Color(0.065, 0.17, 0.16, 0.62),
                 Rect2(float(x) / 6.0, float(z) / 12.0, 1.0 / 6.0, 1.0 / 12.0))
     for i in range(24):
         var radius := 0.048 + 0.006 * sin(time * 8.0 + i)
-        var a := _jet(i)
-        var b := _jet(i + 1)
-        var tangent := (b - a).normalized()
-        var side := tangent.cross(Vector3.RIGHT).normalized()
-        var up := tangent.cross(side)
+        var a := jet[i]
+        var b := jet[i + 1]
+        var side := sides[i]
+        var up := ups[i]
         for j in range(8):
-            var angle0 := TAU * j / 8.0
-            var angle1 := TAU * (j + 1) / 8.0
-            var x := (side * cos(angle0) + up * sin(angle0)) * radius
-            var y := (side * cos(angle1) + up * sin(angle1)) * radius
+            var x := (side * ring[j].x + up * ring[j].y) * radius
+            var next := (j + 1) % 8
+            var y := (side * ring[next].x + up * ring[next].y) * radius
             _quad(batches[Kind.WATER], a + x, a + y, b + y, b + x, Color(0.16, 0.35, 0.38, 0.56),
                 Rect2(float(j) / 8.0, float(i) / 24.0, 1.0 / 8.0, 1.0 / 24.0))
 
     var pulse := lightning_pulse(time)
     var strike := int(floor(time / 4.8))
-    for i in range(18):
-        _ribbon(batches[Kind.LIGHTNING], _bolt_point(i, strike), _bolt_point(i + 1, strike),
-            0.1, Color(0.5, 0.7, 1, pulse), eye)
-    for branch in range(3):
-        var a := _bolt_point(4 + branch * 4, strike)
-        for i in range(6):
-            var b := a + Vector3((1.0 if branch % 2 else -1.0) * (0.13 + random(i + branch * 11) * 0.22),
-                -0.28, (random(i + 2) * 2.0 - 1.0) * 0.25)
-            _ribbon(batches[Kind.LIGHTNING], a, b, 0.045, Color(0.35, 0.55, 1, pulse * (1.0 - float(i) / 7.0)), eye)
-            a = b
+    instances[Kind.LIGHTNING].visible = pulse >= 0.003
+    if instances[Kind.LIGHTNING].visible or not batches[Kind.LIGHTNING].initialized:
+        for i in range(18):
+            _ribbon(batches[Kind.LIGHTNING], _bolt_point(i, strike), _bolt_point(i + 1, strike),
+                0.1, Color(0.5, 0.7, 1, pulse), eye)
+        for branch in range(3):
+            var a := _bolt_point(4 + branch * 4, strike)
+            for i in range(6):
+                var b := a + Vector3((1.0 if branch % 2 else -1.0) * (0.13 + random(i + branch * 11) * 0.22),
+                    -0.28, (random(i + 2) * 2.0 - 1.0) * 0.25)
+                _ribbon(batches[Kind.LIGHTNING], a, b, 0.045, Color(0.35, 0.55, 1, pulse * (1.0 - float(i) / 7.0)), eye)
+                a = b
 
-    var smoke := origin(Kind.SMOKE)
+    var smoke := origins[Kind.SMOKE]
     for i in range(52):
         var seed := random(i + 3001)
         var t := fmod(time * 0.12 + seed, 1.0)
@@ -206,8 +236,10 @@ func animate(time: float, eye: Vector3) -> void:
         var shade := 0.055 + t * 0.08
         puffs.append([p, size, size * 1.15, Color(shade, shade * 1.01, shade * 1.04, sin(PI * t) * 0.7)])
     _billboards(batches[Kind.SMOKE], puffs, eye)
-    for batch in batches:
-        batch.upload()
+    for kind in range(6):
+        if instances[kind].visible or not batches[kind].initialized:
+            batches[kind].upload()
     lights[0].light_energy = 1.2 * (1.0 + 0.13 * sin(time * 13.0) + 0.09 * sin(time * 23.0))
     lights[1].light_energy = 8.0 * exp(-blast_age(time) * 7.0)
     lights[2].light_energy = 4.0 * pulse
+    lights[2].visible = pulse > 0.0
