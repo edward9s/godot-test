@@ -140,9 +140,11 @@ jobs:
           tag="test-build"
           apk="build/GodotForest-test-arm64.apk"
           notes="Latest successful Godot forest build #$GITHUB_RUN_NUMBER, commit $GITHUB_SHA.
-          Exact geometry from filament-test, Godot 4.7.2 release-signed arm64 APK, version 0.1.2.
+          Exact geometry from filament-test, Godot 4.7.2 release-signed arm64 APK, version 0.1.3.
           Android uses Mobile to avoid the reported Forward+ Vulkan device-loss crash.
-          Indexed effect buffers and cached geometry; tap FPS to compare Auto 65-100% against Native 100%.
+          Shared ORM materials, explicit canopy mipmaps/VRAM compression and specialized particle shaders.
+          Mobile retains four 4096-atlas shadow cascades and filter quality; cascade transition blending is disabled.
+          Tap FPS to compare Auto 65-100% against Native 100%.
           Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
@@ -160,4 +162,3 @@ jobs:
       - name: Remove key files
         if: always()
         run: rm -f "$RUNNER_TEMP/source.jks" "$RUNNER_TEMP/release.p12"
-

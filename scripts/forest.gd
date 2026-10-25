@@ -45,9 +45,10 @@ func _create_scene() -> void:
     var canopy_material := ShaderMaterial.new()
     canopy_material.shader = CANOPY_SHADER
     canopy_material.set_shader_parameter("pine_texture", CANOPY_IMAGE)
-    _configure_materials(forest, leaves_material, canopy_material)
+    _configure_materials(forest, leaves_material, canopy_material, {})
 
-func _configure_materials(node: Node, leaves_material: Material, canopy_material: Material) -> void:
+func _configure_materials(node: Node, leaves_material: Material, canopy_material: Material,
+        surfaces: Dictionary) -> void:
     if node is MeshInstance3D:
         var mesh_instance := node as MeshInstance3D
         if mesh_instance.name.begins_with("Leaves_"):
@@ -59,16 +60,42 @@ func _configure_materials(node: Node, leaves_material: Material, canopy_material
             mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_DOUBLE_SIDED
             mesh_instance.extra_cull_margin = 0.12
         else:
-            var material := mesh_instance.get_active_material(0) as StandardMaterial3D
-            assert(material != null, "Expected imported PBR surface material")
-            # Godot's glTF importer leaves this disabled. The generator's linear
-            # vertex tint carries stone variation, bark shading and ground color.
-            material.vertex_color_use_as_albedo = true
-            material.vertex_color_is_srgb = false
+            var source := mesh_instance.get_active_material(0) as StandardMaterial3D
+            assert(source != null, "Expected imported PBR surface material")
+            if not surfaces.has(source):
+                surfaces[source] = _orm_material(source)
+            mesh_instance.set_surface_override_material(0, surfaces[source])
             if mesh_instance.name.begins_with("Ground_"):
                 mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     for child in node.get_children():
-        _configure_materials(child, leaves_material, canopy_material)
+        _configure_materials(child, leaves_material, canopy_material, surfaces)
+
+func _orm_material(source: StandardMaterial3D) -> ORMMaterial3D:
+    # prepare_scene.py packs the zero metallic factor into B. Keep the imported
+    # albedo, normal map, sampler, UVs and AO behavior; share one material per source.
+    assert(source.roughness == 1.0 and source.metallic == 0.0)
+    assert(source.metallic_specular == 0.5)
+    assert(source.roughness_texture != null and source.roughness_texture == source.ao_texture)
+    assert(source.roughness_texture_channel == BaseMaterial3D.TEXTURE_CHANNEL_GREEN)
+    assert(source.ao_texture_channel == BaseMaterial3D.TEXTURE_CHANNEL_RED and not source.ao_on_uv2)
+    var material := ORMMaterial3D.new()
+    material.resource_name = source.resource_name
+    material.albedo_color = source.albedo_color
+    material.albedo_texture = source.albedo_texture
+    material.orm_texture = source.roughness_texture
+    material.normal_enabled = source.normal_enabled
+    material.normal_texture = source.normal_texture
+    material.normal_scale = source.normal_scale
+    material.ao_enabled = source.ao_enabled
+    material.ao_light_affect = source.ao_light_affect
+    material.uv1_scale = source.uv1_scale
+    material.uv1_offset = source.uv1_offset
+    material.texture_filter = source.texture_filter
+    material.texture_repeat = source.texture_repeat
+    material.cull_mode = source.cull_mode
+    material.vertex_color_use_as_albedo = true
+    material.vertex_color_is_srgb = false
+    return material
 
 func _create_environment() -> void:
     var panorama := PanoramaSkyMaterial.new()
@@ -118,7 +145,9 @@ func _create_sun() -> void:
     sun.directional_shadow_split_1 = 0.12
     sun.directional_shadow_split_2 = 0.38
     sun.directional_shadow_split_3 = 0.65
-    sun.directional_shadow_blend_splits = true
+    # Mobile keeps all four cascades and the same atlas/filter. Avoid sampling
+    # two cascades at transitions; desktop retains blended transitions.
+    sun.directional_shadow_blend_splits = RenderingServer.get_current_rendering_method() == "forward_plus"
     sun.directional_shadow_pancake_size = 8.0
     add_child(sun)
     sun.look_at(sun.global_position + SUN_DIRECTION, Vector3.UP)
@@ -230,4 +259,3 @@ func _unhandled_input(event: InputEvent) -> void:
         elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
             distance = minf(24.0, distance + 1.0)
             _update_camera()
-
