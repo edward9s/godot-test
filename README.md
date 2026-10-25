@@ -39,7 +39,7 @@ The supplied SM-X700 log reports compute-pipeline creation failure (`VkResult -1
 
 Version 0.1.1 switches Android back to its original Mobile rendering path, avoiding Forward+-only internal pipelines. Desktop Forward+ remains available. All five effects, animated foliage, source geometry, material AO/normal maps, 4096 shadow atlas, four shadow cascades, HDRI, exposure, glow and fog remain. The FPS overlay identifies the active renderer. The device owner confirmed that version 0.1.1 runs after this change. This is a renderer workaround, not an engine/driver fix or a claim of matching Filament quality.
 
-The manual build checks both Vulkan renderers, with scene/material checks, 3,600 effect frames, 180 full-scene frames, stable buffer identities, bounded memory and GPU readback. Release signing still uses the configured repository secrets.
+Use **Actions → Vulkan tests → Run workflow** to check both Vulkan renderers, with scene/material checks, 3,600 effect frames, 180 full-scene frames, stable buffer identities, bounded memory and GPU readback. This separate manual workflow runs independently of **Android test build**. It prepares and imports its own scene assets and does not export or publish an APK. Android builds retain the quick geometry and headless checks; release signing uses the configured repository secrets.
 
 ## Performance (0.1.2)
 
