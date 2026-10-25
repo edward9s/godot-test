@@ -17,7 +17,7 @@ python3 scripts/prepare_scene.py
 godot --headless --path . --editor --import --quit
 ```
 
-The preparation script downloads SHA-256-verified CC0 Poly Haven imagery and the matching Filament 1.78.1 host SDK headers, compiles the **unmodified** `Geometry.cpp` from filament-test's effects branch (`4d884ac5`), and exports its deterministic 232 spatial/material batches into a textured glTF binary. This includes the spring rock and vegetation clearance around the flowing water. No native Filament code or SDL is shipped in the APK.
+The preparation script downloads SHA-256-verified CC0 Poly Haven imagery and the matching Filament 1.78.1 host SDK headers, compiles the vendored `Geometry.cpp` from filament-test's effects branch (`4d884ac5`), with the outward-facing round-rock winding fix, and exports its deterministic 232 spatial/material batches into a textured glTF binary. This includes the spring rock and vegetation clearance around the flowing water. No native Filament code or SDL is shipped in the APK.
 
 ## Android
 
@@ -27,7 +27,7 @@ Use **Actions → Android test build → Run workflow** to generate a signed arm
 
 The same generated terrain, stones, two arches, surrounding trees, bark branches, canopy quads, ferns and ivy, and Poly Haven 1K PBR maps/HDRI are used. Sun direction matches Filament (`[-0.32,-0.82,-0.47]`); linear source light colors are converted to Godot’s sRGB light properties. Camera orbit: one-finger drag or left mouse; pinch or mouse wheel zoom. The top-left FPS button shows the active renderer, actual 3D resolution percentage, render CPU/GPU time and effect-update CPU time. Tap it to switch between Auto resolution and Native 100%. The timing values are separate measurements, not total CPU frame time.
 
-Desktop uses **Forward+** for SSAO, TAA and PCSS sun shadows. Android uses **Mobile**, with 2× MSAA and PCF shadows. SSAO, TAA and angular PCSS are explicitly disabled when the active renderer is Mobile; this is a visible quality tradeoff, not equivalent output. On Forward+, SSAO uses the source's 0.75 m radius and 1.2 power, and TAA combines with 2× MSAA. Both renderers use the HDRI for diffuse ambient lighting and filtered reflections. Four blended shadow cascades cover 48 m using a 4096 atlas, including the Android override; split distances are 12%, 38% and 65%. Bias is explicitly 0.03 and normal bias 0.35, avoiding the default large normal offset that loses contact shadows on small leaves. On Forward+, PCSS uses a 1.06° angular diameter corresponding to the source's 0.53° solar radius. Shadow filter quality remains 2 on both platforms.
+Desktop uses **Forward+** for SSAO, TAA and PCSS sun shadows. Android uses **Mobile**, with 2× MSAA and PCF shadows. SSAO, TAA and angular PCSS are explicitly disabled when the active renderer is Mobile; this is a visible quality tradeoff, not equivalent output. On Forward+, SSAO uses the source's 0.75 m radius and 1.2 power, and TAA combines with 2× MSAA. Both renderers use the HDRI for diffuse ambient lighting and filtered reflections. Four shadow cascades cover 48 m using a 4096 atlas, including the Android override. Desktop blends the cascade transitions; Mobile leaves them unblended to avoid the extra shadow samples. Split distances are 12%, 38% and 65%. Bias is explicitly 0.03 and normal bias 0.35, avoiding the default large normal offset that loses contact shadows on small leaves. On Forward+, PCSS uses a 1.06° angular diameter corresponding to the source's 0.53° solar radius. Shadow filter quality remains 2 on both platforms.
 
 Imported ground, stone and bark materials explicitly enable the generator's linear vertex colors. Godot 4.7.2 leaves this material flag off after glTF import, losing the source tints and surface variation.
 
@@ -40,6 +40,18 @@ The supplied SM-X700 log reports compute-pipeline creation failure (`VkResult -1
 Version 0.1.1 switches Android back to its original Mobile rendering path, avoiding Forward+-only internal pipelines. Desktop Forward+ remains available. All five effects, animated foliage, source geometry, material AO/normal maps, 4096 shadow atlas, four shadow cascades, HDRI, exposure, glow and fog remain. The FPS overlay identifies the active renderer. The device owner confirmed that version 0.1.1 runs after this change. This is a renderer workaround, not an engine/driver fix or a claim of matching Filament quality.
 
 Use **Actions → Vulkan tests → Run workflow** to check both Vulkan renderers, with scene/material checks, 3,600 effect frames, 180 full-scene frames, stable buffer identities, bounded memory and GPU readback. This separate manual workflow runs independently of **Android test build**. It prepares and imports its own scene assets and does not export or publish an APK. Android builds retain the quick geometry and headless checks; release signing uses the configured repository secrets.
+
+## GPU workload (0.1.3)
+
+Ground, stone and bark now share three `ORMMaterial3D` resources. AO and roughness use the same source channels, but a single ORM fetch replaces the separate AO/roughness/metallic texture fetches in `StandardMaterial3D`. The glTF preparation step bakes the existing zero metallic factor into B and stores the ORM image as lossless PNG; decoded R/G values are unchanged. Albedo, normal maps, linear vertex tints, UV transforms, sampler settings and material culling are preserved.
+
+The external canopy PNG has explicit mipmap generation and VRAM compression settings before editor import. Custom-shader textures no longer depend on automatic 3D detection to receive those settings. Texture resolution, alpha-scissor threshold and wind deformation remain unchanged.
+
+Fire, explosion, spray, lightning and smoke each compile their own variant of a shared shader include. The effect kind is a preprocessor constant, removing the other effects' branches from each fragment program. Particle equations, noise, color, opacity, counts and animation timing remain unchanged.
+
+Mobile retains the 4096 shadow atlas, all four cascades, 48 m range, double-sided foliage shadows and filter quality 2. Cascade transition blending is disabled on Mobile, so cascade boundaries can be more noticeable while avoiding blended shadow lookups. Desktop retains blended transitions. MSAA, HDRI, glow, fog and all five effects remain enabled.
+
+Validation of the particle fragment math in a Mesa OpenGL ES harness covered 120 before/after image comparisons at 128×128, with zero RGBA8 pixel difference. This isolates the fragment code; it is not a complete Godot render or an Android FPS measurement. Material-channel packing was checked independently. Device FPS and the visibility of unblended shadow transitions still need validation on the tablet.
 
 ## Performance (0.1.2)
 
@@ -89,4 +101,3 @@ Godot and Filament implement PBR response, IBL filtering, exposure, antialiasing
 ## Asset credits
 
 Poly Haven forest ground, mossy rock, bark, pine canopy and forest HDR: see `assets/CREDITS.md` and the hash manifest `assets/sources.json` (CC0 1.0). `vendor/Geometry.cpp`, `vendor/Geometry.h`, and the ported effects equations/shaders originate from the owner's filament-test repository.
-

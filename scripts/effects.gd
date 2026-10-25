@@ -3,8 +3,9 @@ extends Node3D
 ## Six small batches; transparent puffs are sorted for the current camera.
 
 enum Kind { FIRE, BLAST, SPRAY, LIGHTNING, SMOKE, WATER }
-const PARTICLES := preload("res://shaders/effects.gdshader")
-const WATER := preload("res://shaders/water.gdshader")
+const SHADERS := [preload("res://shaders/fire.gdshader"), preload("res://shaders/blast.gdshader"),
+    preload("res://shaders/spray.gdshader"), preload("res://shaders/lightning.gdshader"),
+    preload("res://shaders/smoke.gdshader"), preload("res://shaders/water.gdshader")]
 const Batch := preload("res://scripts/effect_batch.gd")
 const SITES := [Vector2(-3.2, 3.1), Vector2(-6.3, -1.6), Vector2(3.5, 3.5),
     Vector2(6.3, -3.2), Vector2(-7.0, -6.2), Vector2(3.5, 3.5)]
@@ -59,9 +60,7 @@ func _ready() -> void:
     water_points.resize(7 * 13)
     for kind in range(6):
         var material := ShaderMaterial.new()
-        material.shader = WATER if kind == Kind.WATER else PARTICLES
-        if kind != Kind.WATER:
-            material.set_shader_parameter("kind", kind)
+        material.shader = SHADERS[kind]
         materials.append(material)
         var bounds := AABB(origins[kind] - Vector3(8, 1, 8), Vector3(16, 24, 16))
         var batch := Batch.new(COUNTS[kind], material, bounds, kind == Kind.WATER)

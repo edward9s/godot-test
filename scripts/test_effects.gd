@@ -13,6 +13,7 @@ func _test() -> void:
     for time in [0.0, 0.12, 0.3, 1.8, 4.8, 5.4, 10.8, 108.0]:
         effects.animate(time, eye)
         for kind in range(6):
+            assert(effects.materials[kind].shader == Effects.SHADERS[kind])
             var batch = effects.batches[kind]
             assert(batch.mesh.get_surface_count() == 1)
             var vertices: PackedVector3Array = batch.vertices

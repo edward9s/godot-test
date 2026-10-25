@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Export exact filament-test geometry to GLB and CC0 textures for Godot 4."""
 import hashlib
+import io
 import json
 import pathlib
 import shutil
@@ -36,6 +37,17 @@ def download(url, target, expected):
 
 def pad(data, fill=b"\0"):
     return data + fill * (-len(data) % 4)
+
+
+def orm_bytes(path):
+    # The scene's metallicFactor is zero. ORMMaterial3D reads B directly, so
+    # bake that factor while retaining the exact decoded AO/roughness channels.
+    with Image.open(path) as picture:
+        red, green, _ = picture.convert("RGB").split()
+        packed = Image.merge("RGB", (red, green, Image.new("L", red.size, 0)))
+        output = io.BytesIO()
+        packed.save(output, format="PNG")
+        return output.getvalue()
 
 
 def build_glb(binary_geometry, sources, canopy_path, output):
@@ -83,7 +95,8 @@ def build_glb(binary_geometry, sources, canopy_path, output):
     for name in ("ground", "stone", "bark"):
         for channel in ("albedo", "normal", "arm"):
             key = f"{name}_{channel}"
-            textures[key] = image(key, sources[key].read_bytes(), "image/jpeg")
+            data = orm_bytes(sources[key]) if channel == "arm" else sources[key].read_bytes()
+            textures[key] = image(key, data, "image/png" if channel == "arm" else "image/jpeg")
     textures["canopy"] = image("pine_canopy", canopy_path.read_bytes(), "image/png")
 
     for name in ("ground", "stone", "bark"):
@@ -194,6 +207,12 @@ def main():
         with Image.open(sources["canopy"]) as picture:
             crop = next(item["crop"] for item in manifest if item["name"] == "canopy")
             picture.convert("RGBA").crop(crop).resize((1024, 1024), Image.Resampling.LANCZOS).save(canopy)
+        # This PNG is also used by a custom shader outside the glTF. Do not rely
+        # on runtime 3D detection to import it with mipmaps and VRAM compression.
+        canopy.with_suffix(".png.import").write_text(
+            '[remap]\nimporter="texture"\ntype="CompressedTexture2D"\n\n'
+            '[params]\ncompress/mode=2\nmipmaps/generate=true\ndetect_3d/compress_to=0\n'
+        )
         shutil.copyfile(sources["environment"], DEST / "environment.hdr")
         output = DEST / "forest.glb"
         build_glb(geometry, sources, canopy, output)
