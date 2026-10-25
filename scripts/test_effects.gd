@@ -9,10 +9,17 @@ func _test() -> void:
     var effects := Effects.new()
     root.add_child(effects)
     effects.set_process(false)
+    var reflection := effects.get_node("WaterReflection") as ReflectionProbe
+    assert(reflection.update_mode == ReflectionProbe.UPDATE_ONCE)
+    assert(reflection.reflection_mask == Effects.WATER_LAYER and reflection.cull_mask == 1)
+    assert((reflection.cull_mask & Effects.WATER_LAYER) == 0)
+    assert((reflection.cull_mask & Effects.PARTICLE_LAYER) == 0)
+    assert(reflection.ambient_mode == ReflectionProbe.AMBIENT_DISABLED)
     var eye := Vector3(3.07, 3.16, 9.54)
     for time in [0.0, 0.12, 0.3, 1.8, 4.8, 5.4, 10.8, 108.0]:
         effects.animate(time, eye)
         for kind in range(6):
+            assert(effects.instances[kind].layers == (Effects.WATER_LAYER if kind == Effects.Kind.WATER else Effects.PARTICLE_LAYER))
             assert(effects.materials[kind].shader == Effects.SHADERS[kind])
             var batch = effects.batches[kind]
             assert(batch.mesh.get_surface_count() == 1)

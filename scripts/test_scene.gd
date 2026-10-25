@@ -23,7 +23,8 @@ func _test() -> void:
     var sun := scene.get_node("WarmSun") as DirectionalLight3D
     assert(is_equal_approx(sun.light_angular_distance, 1.06 if forward else 0.0))
     assert(sun.shadow_enabled and sun.directional_shadow_mode == DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS)
-    assert(sun.directional_shadow_blend_splits == forward)
+    assert(sun.directional_shadow_blend_splits)
+    assert(is_zero_approx(sun.directional_shadow_pancake_size))
     assert(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/size.mobile") == 4096)
     assert(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile") == 2)
     var canopy_import := ConfigFile.new()
