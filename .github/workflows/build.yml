@@ -53,6 +53,9 @@ jobs:
           python3 -m pip install --disable-pip-version-check Pillow==11.3.0
           python3 scripts/prepare_scene.py
           python3 scripts/check_scene.py
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -isystem .deps/host/filament/include \
+            tests/rocks.cpp -o /tmp/godot-forest-rocks
+          /tmp/godot-forest-rocks
 
       - name: Configure headless Android exporter and import assets
         run: |
