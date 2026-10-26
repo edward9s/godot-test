@@ -9,7 +9,7 @@ void vertex() {
 void fragment() {
     vec4 pine = texture(pine_texture, UV);
     ALBEDO = pine.rgb;
-    if (!FRONT_FACING) { NORMAL = -NORMAL; }
+    // Godot already orients NORMAL for cull_disabled before fragment().
     BACKLIGHT = pine.rgb * 0.55 * 0.3;
     ALPHA = pine.a;
     ALPHA_SCISSOR_THRESHOLD = 0.4;

@@ -145,10 +145,11 @@ func _create_sun() -> void:
     sun.directional_shadow_split_1 = 0.12
     sun.directional_shadow_split_2 = 0.38
     sun.directional_shadow_split_3 = 0.65
-    # Mobile keeps all four cascades and the same atlas/filter. Avoid sampling
-    # two cascades at transitions; desktop retains blended transitions.
-    sun.directional_shadow_blend_splits = RenderingServer.get_current_rendering_method() == "forward_plus"
-    sun.directional_shadow_pancake_size = 8.0
+    # Moving crown silhouettes must cross cascade boundaries smoothly on Mobile too.
+    sun.directional_shadow_blend_splits = true
+    # Tall batched crowns can straddle the shadow near plane. Avoid flattening their
+    # animated triangles against that plane; retain all casters and the full wind.
+    sun.directional_shadow_pancake_size = 0.0
     add_child(sun)
     sun.look_at(sun.global_position + SUN_DIRECTION, Vector3.UP)
 

@@ -10,6 +10,8 @@ const Batch := preload("res://scripts/effect_batch.gd")
 const SITES := [Vector2(-3.2, 3.1), Vector2(-6.3, -1.6), Vector2(3.5, 3.5),
     Vector2(6.3, -3.2), Vector2(-7.0, -6.2), Vector2(3.5, 3.5)]
 const COUNTS := [78, 108, 45, 36, 52, 264]
+const WATER_LAYER := 2
+const PARTICLE_LAYER := 4
 
 var batches: Array[Batch] = []
 var materials: Array[ShaderMaterial] = []
@@ -69,6 +71,7 @@ func _ready() -> void:
         instance.name = Kind.keys()[kind]
         instances.append(instance)
         instance.mesh = batch.mesh
+        instance.layers = WATER_LAYER if kind == Kind.WATER else PARTICLE_LAYER
         instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         add_child(instance)
     for kind in [Kind.FIRE, Kind.BLAST, Kind.LIGHTNING]:
@@ -81,6 +84,22 @@ func _ready() -> void:
             Kind.BLAST: Color(1, 0.5, 0.1), Kind.LIGHTNING: Color(0.45, 0.65, 1)}[kind].linear_to_srgb()
         lights.append(light)
         add_child(light)
+    _create_water_reflection()
+
+func _create_water_reflection() -> void:
+    var probe := ReflectionProbe.new()
+    probe.name = "WaterReflection"
+    probe.position = origins[Kind.WATER] + Vector3(0.75, 0.8, 1.9)
+    probe.size = Vector3(4.0, 4.0, 6.0)
+    probe.max_distance = 40.0
+    probe.box_projection = true
+    probe.update_mode = ReflectionProbe.UPDATE_ONCE
+    probe.ambient_mode = ReflectionProbe.AMBIENT_DISABLED
+    # Capture the forest, excluding water and transparent effect particles.
+    # Apply the probe only to water, preserving the existing masonry lighting.
+    probe.cull_mask = 1
+    probe.reflection_mask = WATER_LAYER
+    add_child(probe)
 
 func _process(delta: float) -> void:
     seconds += delta

@@ -9,7 +9,7 @@ void fragment() {
     float vein = smoothstep(0.015, 0.045, abs(UV.x - 0.5));
     float ribs = 0.94 + 0.06 * sin((UV.y + abs(UV.x - 0.5) * 0.6) * 100.0);
     ALBEDO = COLOR.rgb * mix(1.25, ribs, vein);
-    if (!FRONT_FACING) { NORMAL = -NORMAL; }
+    // Godot already orients NORMAL for cull_disabled before fragment().
     BACKLIGHT = COLOR.rgb * 0.65 * 0.45;
     ROUGHNESS = 0.68;
     METALLIC = 0.0;
