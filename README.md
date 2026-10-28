@@ -26,9 +26,11 @@ Use **Actions → Android test build → Run workflow** to generate a signed arm
 Evaluation inputs:
 
 - `fixed_resolution` (checked by default): lock the 3D scene to Native 100%, including after tapping FPS. The HUD shows `Native 100% (locked)`. Unchecked builds start in Auto 65–100% and retain the FPS-button toggle.
-- `vsync` (checked by default, preserving the existing request): request VSync. Uncheck to request uncapped presentation; the Android driver/compositor may still impose a limit. Match and record presentation settings when comparing FPS.
+- `vsync` (unchecked by default): request uncapped presentation for maximum-FPS evaluation. Check only for a separate VSync test; the Android driver/compositor may still impose a limit even when unchecked.
 
 These choices are stored in the exported project, not read from Android environment variables. The Actions summary and release notes record the choices, commit and APK SHA-256. Build and reinstall the new APK for changes to take effect. Native 100% establishes a resolution baseline; image quality still needs same-device comparison.
+
+For maximum-FPS comparisons, keep `fixed_resolution` checked and `vsync` unchecked, use the same device refresh rate, and verify that the result is not capped. Bevy provides the same build choices. Filament's currently pinned Vulkan SDK hard-codes FIFO presentation, so its absent VSync input does not mean unlimited rendering; a refresh-limited result cannot establish an engine's maximum throughput.
 
 ## Scene and controls
 
