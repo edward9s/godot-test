@@ -27,7 +27,7 @@ func _ready() -> void:
     get_viewport().use_taa = RenderingServer.get_current_rendering_method() == "forward_plus"
     resolution.set_enabled(not fixed_resolution and adaptive_resolution and RenderingServer.get_current_rendering_method() == "mobile")
     get_viewport().scaling_3d_scale = 1.0
-    print("Resolution mode: ", "Native 100% (locked)" if fixed_resolution else "unlocked", "; VSync requested: ", ProjectSettings.get_setting("display/window/vsync/vsync_mode", 1))
+    print("Resolution mode: ", "Native 100% (locked)" if fixed_resolution else "unlocked", "; VSync requested: ", ProjectSettings.get_setting("display/window/vsync/vsync_mode", 0))
     RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
     _create_environment()
     _create_sun()

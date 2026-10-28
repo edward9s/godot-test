@@ -10,7 +10,7 @@ on:
       vsync:
         description: 'Request VSync (unchecked: request uncapped presentation)'
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
