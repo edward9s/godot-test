@@ -20,11 +20,14 @@ var resolution := Resolution.new()
 var fps_button: Button
 var fps_elapsed := 0.0
 var gpu_ms := 0.0
+var fixed_resolution: bool = ProjectSettings.get_setting("benchmark/fixed_resolution", false)
 
 func _ready() -> void:
     # Also respect a renderer selected explicitly with --rendering-method.
     get_viewport().use_taa = RenderingServer.get_current_rendering_method() == "forward_plus"
-    resolution.set_enabled(adaptive_resolution and RenderingServer.get_current_rendering_method() == "mobile")
+    resolution.set_enabled(not fixed_resolution and adaptive_resolution and RenderingServer.get_current_rendering_method() == "mobile")
+    get_viewport().scaling_3d_scale = 1.0
+    print("Resolution mode: ", "Native 100% (locked)" if fixed_resolution else "unlocked", "; VSync requested: ", ProjectSettings.get_setting("display/window/vsync/vsync_mode", 1))
     RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
     _create_environment()
     _create_sun()
@@ -183,6 +186,8 @@ func _create_fps() -> void:
     _update_fps()
 
 func _toggle_resolution() -> void:
+    if fixed_resolution:
+        return
     resolution.set_enabled(not resolution.enabled)
     adaptive_resolution = resolution.enabled
     get_viewport().scaling_3d_scale = 1.0
@@ -194,9 +199,11 @@ func _update_fps() -> void:
     var effect_ms: float = get_node("Effects").update_ms
     var mode := "Auto" if resolution.enabled else "Native"
     var gpu := "--" if gpu_ms == 0.0 else "%.1f" % gpu_ms
-    fps_button.text = "FPS: %d | %s | %s %d%% (tap)\nRender CPU: %.1f ms | GPU: %s ms | Effects: %.1f ms" % [
+    var control := "locked" if fixed_resolution else "tap"
+    var vsync := "on" if DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED else "off"
+    fps_button.text = "FPS: %d | %s | %s %d%% (%s) | VSync %s\nRender CPU: %.1f ms | GPU: %s ms | Effects: %.1f ms" % [
         Engine.get_frames_per_second(), RenderingServer.get_current_rendering_method(), mode,
-        roundi(viewport.scaling_3d_scale * 100.0), render_ms, gpu, effect_ms]
+        roundi(viewport.scaling_3d_scale * 100.0), control, vsync, render_ms, gpu, effect_ms]
 
 func _process(delta: float) -> void:
     var viewport := get_viewport()

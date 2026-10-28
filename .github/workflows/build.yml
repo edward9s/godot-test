@@ -2,6 +2,15 @@ name: Android test build
 
 on:
   workflow_dispatch:
+    inputs:
+      fixed_resolution:
+        description: 'Native 100% scene resolution (unchecked: Auto 65-100%)'
+        type: boolean
+        default: true
+      vsync:
+        description: 'Request VSync (unchecked: request uncapped presentation)'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -47,6 +56,14 @@ jobs:
             "$HOME/.local/share/godot/export_templates/$version.stable/"
           test -s "$HOME/.local/share/godot/export_templates/$version.stable/android_release.apk"
           "$RUNNER_TEMP/godot" --version
+
+      - name: Configure evaluation settings in exported project
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/godot" --headless --path . --script scripts/configure.gd -- \
+            '${{ inputs.fixed_resolution }}' '${{ inputs.vsync }}' 2>&1 | tee "$RUNNER_TEMP/configure.log"
+          grep -F 'Evaluation configured:' "$RUNNER_TEMP/configure.log"
+          if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/configure.log"; then exit 1; fi
 
       - name: Generate exact source geometry and PBR textures
         run: |
@@ -145,8 +162,18 @@ jobs:
           Shared ORM materials, explicit canopy mipmaps/VRAM compression and specialized particle shaders.
           Four 4096-atlas shadow cascades; transition blending enabled and pancaking disabled for tall foliage.
           Water uses a one-time forest reflection capture, ripple normals and view-dependent transparency.
-          Tap FPS to compare Auto 65-100% against Native 100%.
-          Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          Fixed Native 100%: ${{ inputs.fixed_resolution }} (false = Auto 65-100%, tap FPS to switch).
+          VSync requested: ${{ inputs.vsync }}. Backend: Vulkan Mobile.
+          Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          SHA-256: $(sha256sum "$apk" | cut -d ' ' -f1)"
+          {
+            echo '## Evaluation settings'
+            echo '- Native 100% locked: ${{ inputs.fixed_resolution }}'
+            echo '- VSync requested: ${{ inputs.vsync }}'
+            echo '- Backend: Vulkan Mobile'
+            echo "- Commit: $GITHUB_SHA"
+            echo "- APK SHA-256: $(sha256sum "$apk" | cut -d ' ' -f1)"
+          } >> "$GITHUB_STEP_SUMMARY"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" \
