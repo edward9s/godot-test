@@ -15,6 +15,18 @@ func _test() -> void:
     assert(surfaces > 100 and foliage > 10)
     assert(materials.size() == 3, "Ground, stone and bark should each share an ORM material")
     assert(root.get_camera_3d() != null)
+    if ProjectSettings.get_setting("benchmark/fixed_resolution", false):
+        scene._toggle_resolution()
+        assert(not scene.resolution.enabled, "Benchmark build must stay at Native 100% after a tap")
+        assert(root.scaling_3d_scale == 1.0)
+        for i in range(300):
+            assert(scene.resolution.sample(0.1, 100.0) == 1.0)
+    else:
+        var before: bool = scene.resolution.enabled
+        scene._toggle_resolution()
+        assert(scene.resolution.enabled != before)
+        scene._toggle_resolution()
+        assert(scene.resolution.enabled == before)
     assert(ProjectSettings.get_setting("rendering/renderer/rendering_method") == "forward_plus")
     assert(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile") == "mobile")
     var forward := RenderingServer.get_current_rendering_method() == "forward_plus"
@@ -35,7 +47,7 @@ func _test() -> void:
         var canopy := load("res://assets/generated/canopy.png") as Texture2D
         var image := canopy.get_image()
         assert(image != null and image.has_mipmaps())
-    print("Scene passed: imported PBR tints, animated double-sided shadow casters and orbit camera")
+    print("Scene passed: imported PBR tints, animated double-sided shadow casters, orbit camera and resolution lock")
     scene.queue_free()
     quit()
 
