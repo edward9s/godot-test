@@ -19,6 +19,7 @@ var run_id := ""
 var started_at := 0
 var applied := false
 var size := Vector2i.ZERO
+var surface_size := Vector2i.ZERO
 var render_size := Vector2i.ZERO
 var draw_anchor := 0
 var stable_since := 0
@@ -111,7 +112,8 @@ func _start_run() -> void:
     refresh = _refresh()
     protocol.start()
     applied = false
-    size = Vector2i(viewport.get_visible_rect().size)
+    size = Vector2i(viewport.get_texture().get_size())
+    surface_size = DisplayServer.window_get_size()
     metric_count = 0
     definitions = {"cpu_effects_ms": _definition("cpu", "Godot effects.gd Time.get_ticks_usec", "before animate(seconds, eye) to after CPU mesh/light updates; excludes RenderingServer execution", "godot.effects.animate")}
     stable_since = Time.get_ticks_usec()
@@ -173,7 +175,7 @@ func _process(_delta: float) -> void:
             _invalidate("display refresh rate changed")
             return
         progress.text = "%s · %d/3 · %s · cancel" % [preset, repetition, _phase_text(now)]
-    if Vector2i(viewport.get_visible_rect().size) != size:
+    if Vector2i(viewport.get_texture().get_size()) != size or DisplayServer.window_get_size() != surface_size:
         _invalidate("Surface dimensions changed")
     elif applied and DisplayServer.window_get_vsync_mode() != observed_vsync:
         _invalidate("VSync setting changed")
@@ -191,6 +193,9 @@ func _frame() -> void:
     if not active():
         return
     var now := Time.get_ticks_usec()
+    if size != surface_size and DisplayServer.get_name() != "headless":
+        _invalidate("viewport pixels differ from native Surface size")
+        return
     var ready := Engine.get_frames_drawn() - draw_anchor >= 120 and now - stable_since >= 2000000
     if not applied:
         if ready:
@@ -260,8 +265,9 @@ func _metadata() -> Dictionary:
         "repetition": repetition, "valid": protocol.valid, "invalid_reason": protocol.reason,
         "started_at": started_at, "warmup_seconds": 30, "measure_seconds": 60,
         "engine": engine, "device": device, "scene": build.scene,
-        "environment": {"backend": api, "surface_size": [size.x, size.y],
+        "environment": {"backend": api, "surface_size": [surface_size.x, surface_size.y],
             "render_size": [render_size.x, render_size.y] if applied else [size.x, size.y],
+            "render_size_source": "viewport texture pixels times native scaling_3d_scale; attachment readback unavailable",
             "dynamic_resolution": false, "vsync_requested": "off" if applied else "engine_default",
             "presentation_mode": null, "refresh_hz": _refresh(), "refresh_limited_possible": true,
             "gpu_profiling": applied and preset == "gpu", "gpu": gpu if gpu != "" else null,

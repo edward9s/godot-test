@@ -57,6 +57,24 @@ Standard/Baseline keep the existing Mobile renderer quality: 2× MSAA, TAA off o
 
 CPU effect time is the raw monotonic span around `effects.animate`, not its smoothed HUD number. GPU Diagnostic enables `RenderingServer.viewport_set_measure_render_time`; Standard disables it, restoring the original showcase measurement afterward. Root viewport CPU and GPU API observations have no native sample identity, so repeated latest observations are explicitly documented. No pass times or presentation FPS are fabricated. Device thermal status is a pre-initialization snapshot.
 
-Verified locally with Godot 4.7.2 headless: pure protocol tests, existing scene/effects/resolution tests, eight-preset synthetic export/restore integration, and Python validation of all eight exports. Headless tests validate behavior and data, not Android rendering performance. Android SAF, Java reflection metadata, viewport dimensions, native GPU timestamps and screenshots still require the target APK/device.
+Verified locally with Godot 4.7.2 headless: pure protocol tests, existing scene/effects/resolution tests, eight-preset synthetic export/restore integration, and Python validation of all eight exports. Headless tests validate behavior and data, not Android rendering performance. An unsigned Release APK was also exported locally and passed ABI/DEX/benchmark-script/provenance packaging checks. The exporter workflow now writes Godot 4.7’s versioned editor settings filename. Repository-key signing, Android SAF, Java reflection metadata, native viewport dimensions, GPU timestamps and screenshots still require the target APK/device.
 
 Sources: [Godot 4.7.2 RenderingServer](https://github.com/godotengine/godot/blob/4.7.2-stable/doc/classes/RenderingServer.xml), [native SAF dialog](https://github.com/godotengine/godot/blob/4.7.2-stable/doc/classes/DisplayServer.xml). Build provenance: run `python3 benchmark/build.py` before importing/exporting; the Android workflow does this automatically.
+
+Formal JSON schemas: `metadata.schema.json`, `summary.schema.json`. The CLI also checks CSV timelines, scope definitions, preset conditions and recomputed statistics. Run `python3 benchmark/examples.py /tmp/forest-examples` for nine clearly marked synthetic runs plus an example Markdown/CSV report.
+
+## Galaxy Tab S8 procedure (all three APKs)
+
+1. Install matching Release APKs built from the three PR branches, with validation, Vulkan queue waits and pipeline statistics disabled. Record APK hashes and build commits. Use the same landscape orientation, screen mode/refresh, brightness and thermal starting condition; close background workloads. Filament: select Vulkan to compare Vulkan results; keep GLES in its own group.
+2. Take a Reference screenshot at 38.52 s in each APK at the same native Surface size. Export settings and inspect materials, shadows, foliage, water, particles, exposure and postprocessing differences. Existing native pipelines differ; matching option names do not prove image equality.
+3. Run Standard (three repetitions automatically). Do not touch camera or change display settings. Initialization and 30 s warmup precede each 60 s measurement. Let the tablet cool consistently between engine/preset batches. Keep all repetitions, including invalid runs with reasons.
+4. Run GPU Diagnostic separately. Export each ZIP through Android's document picker. GPU Diagnostic FPS must remain separate from Standard. Check actual MSAA, Surface/3D sizes, GPU timestamp availability and profiling flags.
+5. Run each Bottleneck preset independently (baseline, no shadows, no AA, no Bloom, fixed 65% axes, no effects). Restore to showcase after each group. Compare deltas only within matching backend/build/device/presentation conditions. A/B effects identify sensitivity, not unique hardware causes.
+6. Validate and report using `python3 benchmark/compare.py exports/*.zip --output tab-s8`. Unknown actual presentation modes intentionally prevent a formal cross-engine ranking; the report still exposes each engine's observations/scopes.
+7. Validate cancellation, background/resume, Surface resize, refresh change and settings changes; affected runs must be invalid. Repeat tests and watch memory/thermal behavior. Measure showcase vs Standard overhead and GPU Diagnostic overhead separately. These checks are pending until done on hardware.
+
+No Galaxy Tab S8 is attached to this environment. No tablet FPS, screenshot equivalence or overhead acceptance is claimed.
+
+The report also provides a separate within-engine A/B sensitivity table. It only allows the selected setting to differ and keeps GPU Diagnostic deltas explicitly labeled profiling overhead; it does not turn those deltas into a unique hardware diagnosis.
+
+APK contents are checked with `python3 benchmark/check_apk.py ENGINE path.apk --commit SHA`: arm64 ELF, DEX integrity, runtime bridge/scripts, required scene assets and baked commit. This supplements the existing signer/zip alignment checks; it does not replace them.

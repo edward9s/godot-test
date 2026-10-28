@@ -26,6 +26,9 @@ func _start() -> void:
             controller.protocol.sample(30100100 + i * 100000, true, 30.1 + i * 0.1, 0.1)
         var metadata: Dictionary = controller._metadata()
         metadata.test_data = true
+        # The headless display has no native Surface (0x0). Explicit fixture pixels only.
+        if DisplayServer.get_name() == "headless":
+            metadata.environment.surface_size = [controller.size.x, controller.size.y]
         metadata.limitations.append("SYNTHETIC integration fixture; no hardware performance claim.")
         assert(controller._save())
         var folder: String = controller.ROOT.path_join(controller.run_id)

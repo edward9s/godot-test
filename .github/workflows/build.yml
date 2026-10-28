@@ -84,7 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.config/godot"
-          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          cat > "$HOME/.config/godot/editor_settings-4.7.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
@@ -155,6 +155,7 @@ jobs:
           "$RUNNER_TEMP/godot" --headless --path . --export-release Android \
             build/GodotForest-test-arm64.apk
           test -s build/GodotForest-test-arm64.apk
+          python3 benchmark/check_apk.py Godot build/GodotForest-test-arm64.apk --commit "$GITHUB_SHA"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose \
             build/GodotForest-test-arm64.apk
           unzip -l build/GodotForest-test-arm64.apk | grep -F 'assets/' >/dev/null

@@ -10,6 +10,11 @@ func _initialize() -> void:
     assert(result.p99_ms == 10.0 and result.low_1_fps == 10.0)
     assert(is_equal_approx(result.average_fps, 100000.0 / 1090.0))
     assert(Protocol.calculate(PackedFloat64Array([0.0])).is_empty())
+    data.resize(102)
+    data.fill(10.0)
+    data[100] = 50.0
+    data[101] = 100.0
+    assert(is_equal_approx(Protocol.calculate(data).low_1_fps, 1000.0 / 75.0))
     var run := Protocol.new()
     run.start()
     assert(run.sample(100, true, 0.0, 0.0))
