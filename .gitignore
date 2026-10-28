@@ -5,3 +5,5 @@ assets/generated/
 build/
 *.apk
 .DS_Store
+
+benchmark/__pycache__/
