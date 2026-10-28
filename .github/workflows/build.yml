@@ -57,6 +57,12 @@ jobs:
           test -s "$HOME/.local/share/godot/export_templates/$version.stable/android_release.apk"
           "$RUNNER_TEMP/godot" --version
 
+      - name: Bake benchmark provenance and validate protocol
+        run: |
+          python3 benchmark/build.py
+          python3 -m unittest discover -s benchmark -p 'test_*.py'
+          "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_benchmark.gd
+
       - name: Configure evaluation settings in exported project
         run: |
           set -euo pipefail
@@ -95,6 +101,10 @@ jobs:
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_scene.gd 2>&1 | tee "$RUNNER_TEMP/scene.log"
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_resolution.gd 2>&1 | tee "$RUNNER_TEMP/resolution.log"
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/bench_effects.gd 2>&1 | tee "$RUNNER_TEMP/bench.log"
+          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_benchmark_scene.gd 2>&1 | tee "$RUNNER_TEMP/benchmark.log"
+          python3 benchmark/compare.py "$HOME/.local/share/godot/app_userdata/Forest Ruins Godot/benchmarks" --validate-only
+          grep -F 'Benchmark scene passed:' "$RUNNER_TEMP/benchmark.log"
+          if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/benchmark.log"; then exit 1; fi
           grep -F 'Effects passed:' "$RUNNER_TEMP/effects.log"
           grep -F 'Scene passed:' "$RUNNER_TEMP/scene.log"
           grep -F 'Resolution passed:' "$RUNNER_TEMP/resolution.log"

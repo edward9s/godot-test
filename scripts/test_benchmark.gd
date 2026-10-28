@@ -1,0 +1,33 @@
+extends SceneTree
+const Protocol := preload("res://benchmark/protocol.gd")
+
+func _initialize() -> void:
+    var data := PackedFloat64Array()
+    data.resize(100)
+    data.fill(10.0)
+    data[99] = 100.0
+    var result := Protocol.calculate(data)
+    assert(result.p99_ms == 10.0 and result.low_1_fps == 10.0)
+    assert(is_equal_approx(result.average_fps, 100000.0 / 1090.0))
+    assert(Protocol.calculate(PackedFloat64Array([0.0])).is_empty())
+    var run := Protocol.new()
+    run.start()
+    assert(run.sample(100, true, 0.0, 0.0))
+    run.sample(30000099, true, 29.999999, 0.0)
+    assert(run.phase == Protocol.Phase.WARMUP and run.count == 0)
+    run.sample(30000100, true, 30.0, 0.0)
+    assert(run.phase == Protocol.Phase.MEASURE and run.count == 0)
+    for i in 600:
+        run.sample(30100100 + i * 100000, true, 30.1 + i * 0.1, 0.01)
+    assert(run.valid and run.count == 600 and run.statistics().average_fps == 10.0)
+    run.start()
+    run.sample(100, true, 0.0, 0.0)
+    run.sample(100, true, 0.0, 0.0)
+    assert(not run.valid and run.phase == Protocol.Phase.FINISHED)
+    run.start()
+    run.sample(100, true, 0.0, 0.0)
+    run.sample(30000100, true, 30.0, 0.0)
+    run.sample(30100100, false, 30.1, 0.0)
+    assert(not run.valid and run.count == 0)
+    print("Benchmark protocol passed: statistics, warmup, monotonicity, readiness invalidation")
+    quit()

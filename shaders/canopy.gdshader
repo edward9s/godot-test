@@ -1,9 +1,11 @@
 shader_type spatial;
 render_mode cull_disabled, depth_draw_opaque, diffuse_burley, specular_schlick_ggx;
 uniform sampler2D pine_texture : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+global uniform float benchmark_time;
 void vertex() {
+    float clock = benchmark_time >= 0.0 ? benchmark_time : TIME;
     float phase = VERTEX.x * 0.71 + VERTEX.z * 0.49;
-    float wind = sin(TIME * 1.2 + phase) + 0.35 * sin(TIME * 2.6 + phase * 2.0);
+    float wind = sin(clock * 1.2 + phase) + 0.35 * sin(clock * 2.6 + phase * 2.0);
     VERTEX.xz += vec2(0.06, 0.025) * wind;
 }
 void fragment() {

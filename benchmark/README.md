@@ -48,3 +48,15 @@ Different builds or settings of the same engine refuse aggregation. Unknown actu
 Pending: complete Android integration, release APK build/package checks, start/cancel/export and restore behavior, background/rotation invalidation, shader/reflection readiness, actual GPU timestamp support, repeated-run memory use, showcase vs Standard overhead, thermal behavior and matched screenshots at 38.52 seconds.
 
 For Bevy's 8–9 FPS, independent resolution/shadow/AA/Bloom/effects tests can identify sensitivity to those workloads. Native render-world timings can separate preparation and submission scopes. These observations alone cannot prove shader ALU, texture bandwidth, occupancy, overdraw, driver stalls or CPU/GPU queue dependencies; AGI/Perfetto or supported vendor counters are still needed. Adreno GPU preprocessing support must be recorded from the actual Bevy adapter, not assumed from model name.
+
+## Godot Android operation
+
+Tap **Benchmark** below the FPS overlay. Each of the eight presets runs three times (initialization, 30 second warmup, 60 second measurement per run). The progress button cancels. **View results** reads saved summaries. **Export ZIP** opens Android's native document picker. Results remain locally if export fails. **Reference screenshot** freezes only the separate reference capture at 38.52 seconds, then restores showcase state.
+
+Standard/Baseline keep the existing Mobile renderer quality: 2× MSAA, TAA off on Mobile, 4096 shadow atlas with four cascades and 48 m shadow distance, Bloom 0.065, fog and native materials. Forward+ uses its existing TAA/SSAO path. The no-AA preset disables every viewport AA setting; no-Bloom disables only Bloom; no-effects hides six batches and their three lights and skips the effects CPU update (foliage wind remains). The 65% preset scales each 3D axis; UI stays native.
+
+CPU effect time is the raw monotonic span around `effects.animate`, not its smoothed HUD number. GPU Diagnostic enables `RenderingServer.viewport_set_measure_render_time`; Standard disables it, restoring the original showcase measurement afterward. Root viewport CPU and GPU API observations have no native sample identity, so repeated latest observations are explicitly documented. No pass times or presentation FPS are fabricated. Device thermal status is a pre-initialization snapshot.
+
+Verified locally with Godot 4.7.2 headless: pure protocol tests, existing scene/effects/resolution tests, eight-preset synthetic export/restore integration, and Python validation of all eight exports. Headless tests validate behavior and data, not Android rendering performance. Android SAF, Java reflection metadata, viewport dimensions, native GPU timestamps and screenshots still require the target APK/device.
+
+Sources: [Godot 4.7.2 RenderingServer](https://github.com/godotengine/godot/blob/4.7.2-stable/doc/classes/RenderingServer.xml), [native SAF dialog](https://github.com/godotengine/godot/blob/4.7.2-stable/doc/classes/DisplayServer.xml). Build provenance: run `python3 benchmark/build.py` before importing/exporting; the Android workflow does this automatically.
