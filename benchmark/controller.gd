@@ -51,6 +51,8 @@ func _ready() -> void:
     add_child(layer)
     button = MenuButton.new()
     button.text = "Benchmark"
+    button.custom_minimum_size = Vector2(240, 64)
+    button.add_theme_font_size_override("font_size", 24)
     button.position = Vector2(12, 130)
     layer.add_child(button)
     var menu := button.get_popup()
@@ -62,12 +64,25 @@ func _ready() -> void:
     menu.id_pressed.connect(_menu)
     progress = Button.new()
     progress.position = button.position
+    progress.custom_minimum_size = Vector2(480, 64)
+    progress.add_theme_font_size_override("font_size", 24)
     progress.visible = false
     progress.pressed.connect(func(): _invalidate("cancelled by user"))
     layer.add_child(progress)
     dialog = AcceptDialog.new()
     dialog.size = Vector2i(900, 550)
+    dialog.get_label().hide()
+    var report := RichTextLabel.new()
+    report.name = "Report"
+    report.add_theme_font_size_override("normal_font_size", 22)
+    dialog.add_child(report)
+    report.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    report.offset_left = 16
+    report.offset_top = 16
+    report.offset_right = -16
+    report.offset_bottom = -64
     layer.add_child(dialog)
+    _recover()
     RenderingServer.frame_post_draw.connect(_frame)
 
 func active() -> bool:
@@ -81,7 +96,7 @@ func _menu(id: int) -> void:
     else:
         _begin("standard" if id == 8 else PRESETS[id], id == 8)
 
-func _begin(selected: String, capture := false) -> void:
+func _begin(selected: String, capture := false, next_repetition := 1) -> void:
     if active():
         return
     snapshot = {"yaw": forest.yaw, "pitch": forest.pitch, "distance": forest.distance,
@@ -98,7 +113,7 @@ func _begin(selected: String, capture := false) -> void:
     forest.adaptive_resolution = false
     forest.touches.clear()
     preset = selected
-    repetition = 1
+    repetition = next_repetition
     reference = capture
     button.hide()
     progress.show()
@@ -121,6 +136,13 @@ func _start_run() -> void:
     poll_at = 0
     animation_origin = 0
     reference_frames = 0
+    if not reference:
+        protocol.reason = "process interrupted before completion"
+        if not _save() or not _write(ROOT.path_join(run_id).path_join(".pending"), "in progress"):
+            _restore()
+            _show("Cannot save benchmark initialization record.")
+            return
+        protocol.reason = null
 
 func _apply() -> void:
     # Apply only after baseline reflection/shader initialization has settled.
@@ -230,13 +252,20 @@ func _definition(kind: String, source: String, scope: String, scope_id: String) 
     return {"kind": kind, "unit": "ms", "source": source, "scope": scope, "scope_id": scope_id}
 
 func _settings() -> Dictionary:
-    return {"msaa_samples": [1, 2, 4, 8][viewport.msaa_3d], "taa": viewport.use_taa,
+    return {"camera": [forest.yaw, forest.pitch, forest.distance], "camera_fov_deg": forest.camera.fov,
+        "msaa_samples": [1, 2, 4, 8][viewport.msaa_3d], "taa": viewport.use_taa,
         "fxaa": viewport.screen_space_aa != Viewport.SCREEN_SPACE_AA_DISABLED,
         "shadows": sun.shadow_enabled, "bloom": environment.glow_enabled,
         "effects": effects.visible and effects.is_processing(), "pipeline": RenderingServer.get_current_rendering_method(),
         "shadow_distance_m": sun.directional_shadow_max_distance,
         "shadow_cascades": 4, "shadow_atlas": ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/size"),
         "ssao_requested": environment.ssao_enabled, "fog": environment.fog_enabled,
+        "bloom_intensity": environment.glow_intensity, "tonemap_mode": environment.tonemap_mode,
+        "ambient_energy": environment.ambient_light_energy, "sky_energy": environment.background_energy_multiplier,
+        "fog_density": environment.fog_density, "shadow_blur": sun.shadow_blur,
+        "sun_angular_distance": sun.light_angular_distance,
+        "shadow_filter_quality": ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality"),
+        "scaling_3d_mode": viewport.scaling_3d_mode,
         "scale": viewport.scaling_3d_scale, "vsync_reported": DisplayServer.window_get_vsync_mode()}
 
 func _device() -> Dictionary:
@@ -251,7 +280,14 @@ func _device() -> Dictionary:
         result.android = version.RELEASE
         if version.SDK_INT >= 29 and Engine.has_singleton("AndroidRuntime"):
             var activity = Engine.get_singleton("AndroidRuntime").getActivity()
-            result.thermal_status = activity.getSystemService("power").getCurrentThermalStatus()
+            if activity != null:
+                var power = activity.getSystemService("power")
+                if power != null:
+                    var thermal = power.getCurrentThermalStatus()
+                    if JavaClassWrapper.get_exception() == null:
+                        result.thermal_status = thermal
+                    else:
+                        result.thermal_error = "PowerManager thermal status unavailable (Java exception)"
     return result
 
 func _metadata() -> Dictionary:
@@ -266,11 +302,11 @@ func _metadata() -> Dictionary:
         "started_at": started_at, "warmup_seconds": 30, "measure_seconds": 60,
         "engine": engine, "device": device, "scene": build.scene,
         "environment": {"backend": api, "surface_size": [surface_size.x, surface_size.y],
-            "render_size": [render_size.x, render_size.y] if applied else [size.x, size.y],
+            "render_size": [roundi(size.x * viewport.scaling_3d_scale), roundi(size.y * viewport.scaling_3d_scale)],
             "render_size_source": "viewport texture pixels times native scaling_3d_scale; attachment readback unavailable",
             "dynamic_resolution": false, "vsync_requested": "off" if applied else "engine_default",
             "presentation_mode": null, "refresh_hz": _refresh(), "refresh_limited_possible": true,
-            "gpu_profiling": applied and preset == "gpu", "gpu": gpu if gpu != "" else null,
+            "gpu_profiling": (preset == "gpu") if applied else true, "gpu": gpu if gpu != "" else null,
             "driver": null, "api_version": RenderingServer.get_video_adapter_api_version(),
             "thermal_status": device.thermal_status},
         "settings": _settings(), "metrics": definitions,
@@ -344,8 +380,7 @@ func _finish() -> void:
         var selected := preset
         # Each repetition starts from the original baseline, not the last preset.
         var next := repetition
-        _begin(selected)
-        repetition = next
+        _begin(selected, false, next)
     else:
         _show(message + "\nResults saved locally. Use Benchmark → Export ZIP.")
 
@@ -382,14 +417,27 @@ func _restore() -> void:
     progress.hide()
 
 func _show(message: String) -> void:
-    dialog.dialog_text = message
+    (dialog.get_node("Report") as RichTextLabel).text = message
     dialog.popup_centered()
+
+func _recover() -> void:
+    for dir in DirAccess.get_directories_at(ROOT):
+        var path := ROOT.path_join(dir)
+        if not FileAccess.file_exists(path.path_join(".pending")):
+            continue
+        var m = JSON.parse_string(FileAccess.get_file_as_string(path.path_join("metadata.json")))
+        var s = JSON.parse_string(FileAccess.get_file_as_string(path.path_join("summary.json")))
+        if m is Dictionary and s is Dictionary and m.get("valid") == false and s.get("valid") == false and m.get("run_id") == s.get("run_id") and str(m.get("invalid_reason")).begins_with("process interrupted") and str(s.get("invalid_reason")).begins_with("process interrupted"):
+            if DirAccess.remove_absolute(path.path_join(".pending")) != OK:
+                push_error("Cannot recover incomplete benchmark marker: " + path)
 
 func _results() -> void:
     var text := PackedStringArray()
     for dir in DirAccess.get_directories_at(ROOT):
         var path := ROOT.path_join(dir)
-        if FileAccess.file_exists(path.path_join("summary.json")) and not FileAccess.file_exists(path.path_join(".pending")):
+        if FileAccess.file_exists(path.path_join(".pending")):
+            text.append("Interrupted or incomplete run: " + dir)
+        elif FileAccess.file_exists(path.path_join("summary.json")):
             text.append(FileAccess.get_file_as_string(path.path_join("summary.json")))
     _show("\n\n".join(text) if not text.is_empty() else "No results yet.")
 

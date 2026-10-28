@@ -37,6 +37,18 @@ func _start() -> void:
         assert(is_equal_approx(root.scaling_3d_scale, original_scale))
         assert(scene.camera.position.is_equal_approx(original_camera))
         assert(not controller.active() and scene.get_node("Effects").benchmark_seconds < 0.0)
+    controller._begin("standard", false, 2)
+    assert(controller.repetition == 2)
+    var interrupted: String = controller.ROOT.path_join(controller.run_id)
+    assert(FileAccess.file_exists(interrupted.path_join(".pending")))
+    controller._restore() # Simulate a new process before the final result write.
+    var pending: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(interrupted.path_join("metadata.json")))
+    pending.test_data = true
+    pending.environment.surface_size = pending.environment.render_size
+    assert(controller._write(interrupted.path_join("metadata.json"), JSON.stringify(pending)))
+    controller._recover()
+    assert(not FileAccess.file_exists(interrupted.path_join(".pending")))
+    assert(not pending.valid and pending.repetition == 2 and str(pending.invalid_reason).begins_with("process interrupted"))
     print("Benchmark scene passed: eight presets, export and restoration (SYNTHETIC)")
     scene.queue_free()
     await process_frame
