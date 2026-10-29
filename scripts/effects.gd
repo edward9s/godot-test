@@ -18,6 +18,8 @@ var materials: Array[ShaderMaterial] = []
 var lights: Array[OmniLight3D] = []
 var seconds := 0.0
 var update_ms := 0.0
+var raw_update_ms := 0.0
+var benchmark_seconds := -1.0
 var instances: Array[MeshInstance3D] = []
 var origins := PackedVector3Array()
 var jet := PackedVector3Array()
@@ -102,10 +104,11 @@ func _create_water_reflection() -> void:
     add_child(probe)
 
 func _process(delta: float) -> void:
-    seconds += delta
+    seconds = benchmark_seconds if benchmark_seconds >= 0.0 else seconds + delta
     var start := Time.get_ticks_usec()
     animate(seconds, get_viewport().get_camera_3d().global_position)
-    update_ms = lerpf(update_ms, float(Time.get_ticks_usec() - start) / 1000.0, 0.1)
+    raw_update_ms = float(Time.get_ticks_usec() - start) / 1000.0
+    update_ms = lerpf(update_ms, raw_update_ms, 0.1)
 
 func _quad(batch: Batch, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
         color: Color, uv := Rect2(0, 0, 1, 1)) -> void:

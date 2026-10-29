@@ -20,6 +20,7 @@ var resolution := Resolution.new()
 var fps_button: Button
 var fps_elapsed := 0.0
 var gpu_ms := 0.0
+var benchmark: Node
 var fixed_resolution: bool = ProjectSettings.get_setting("benchmark/fixed_resolution", false)
 
 func _ready() -> void:
@@ -39,6 +40,8 @@ func _ready() -> void:
     add_child(effects)
     effects.animate(0.0, camera.global_position)
     _create_fps()
+    benchmark = preload("res://benchmark/controller.gd").new()
+    add_child(benchmark)
 
 func _create_scene() -> void:
     var forest := FOREST.instantiate()
@@ -186,6 +189,8 @@ func _create_fps() -> void:
     _update_fps()
 
 func _toggle_resolution() -> void:
+    if benchmark != null and benchmark.active():
+        return
     if fixed_resolution:
         return
     resolution.set_enabled(not resolution.enabled)
@@ -206,6 +211,8 @@ func _update_fps() -> void:
         roundi(viewport.scaling_3d_scale * 100.0), control, vsync, render_ms, gpu, effect_ms]
 
 func _process(delta: float) -> void:
+    if benchmark != null and benchmark.active():
+        return
     var viewport := get_viewport()
     gpu_ms = RenderingServer.viewport_get_measured_render_time_gpu(viewport.get_viewport_rid())
     var scale := resolution.sample(delta, gpu_ms)
@@ -238,6 +245,8 @@ func _pinch_length() -> float:
     return (points[0] as Vector2).distance_to(points[1] as Vector2)
 
 func _unhandled_input(event: InputEvent) -> void:
+    if benchmark != null and benchmark.active():
+        return
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
         if touch.pressed:

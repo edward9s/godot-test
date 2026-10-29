@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Bake benchmark provenance
+        run: python3 benchmark/build.py
 
       - name: Install Godot 4.7.2
         run: |

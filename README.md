@@ -134,3 +134,7 @@ Godot and Filament implement PBR response, IBL filtering, exposure, antialiasing
 ## Asset credits
 
 Poly Haven forest ground, mossy rock, bark, pine canopy and forest HDR: see `assets/CREDITS.md` and the hash manifest `assets/sources.json` (CC0 1.0). `vendor/Geometry.cpp`, `vendor/Geometry.h`, and the ported effects equations/shaders originate from the owner's filament-test repository.
+
+## Unified benchmark
+
+Implementation status, protocol and comparison CLI: [benchmark/README.md](benchmark/README.md).
