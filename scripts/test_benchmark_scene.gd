@@ -37,6 +37,10 @@ func _start() -> void:
         assert(is_equal_approx(root.scaling_3d_scale, original_scale))
         assert(scene.camera.position.is_equal_approx(original_camera))
         assert(not controller.active() and scene.get_node("Effects").benchmark_seconds < 0.0)
+    controller.size = Vector2i(1280, 720)
+    root.scaling_3d_scale = 0.65
+    assert(controller._render_size() == [832, 467])
+    root.scaling_3d_scale = 1.0
     controller._begin("standard", false, 2)
     assert(controller.repetition == 2)
     var interrupted: String = controller.ROOT.path_join(controller.run_id)

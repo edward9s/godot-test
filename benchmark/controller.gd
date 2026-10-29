@@ -20,7 +20,6 @@ var started_at := 0
 var applied := false
 var size := Vector2i.ZERO
 var surface_size := Vector2i.ZERO
-var render_size := Vector2i.ZERO
 var draw_anchor := 0
 var stable_since := 0
 var pipeline_count := -1
@@ -99,6 +98,10 @@ func _menu(id: int) -> void:
 func _begin(selected: String, capture := false, next_repetition := 1) -> void:
     if active():
         return
+    var version := Engine.get_version_info()
+    if version.major != 4 or version.minor != 7 or version.patch != 2:
+        _show("Benchmark requires the audited Godot 4.7.2 renderer API.")
+        return
     snapshot = {"yaw": forest.yaw, "pitch": forest.pitch, "distance": forest.distance,
         "resolution": forest.resolution, "adaptive": forest.adaptive_resolution,
         "scale": viewport.scaling_3d_scale, "msaa": viewport.msaa_3d,
@@ -169,7 +172,6 @@ func _apply() -> void:
     applied = true
     animation_origin = Time.get_ticks_usec()
     settings = _settings()
-    render_size = Vector2i(roundi(size.x * viewport.scaling_3d_scale), roundi(size.y * viewport.scaling_3d_scale))
 
 func _process(_delta: float) -> void:
     if not active():
@@ -270,7 +272,7 @@ func _settings() -> Dictionary:
 
 func _device() -> Dictionary:
     var result := {"brand": null, "model": null, "android": null, "fingerprint": null, "thermal_status": null,
-        "captured_at": int(Time.get_unix_time_from_system() * 1000.0)}
+        "display_mode_size": null, "captured_at": int(Time.get_unix_time_from_system() * 1000.0)}
     if OS.get_name() == "Android":
         var android_build = JavaClassWrapper.wrap("android.os.Build")
         var version = JavaClassWrapper.wrap("android.os.Build$VERSION")
@@ -278,9 +280,14 @@ func _device() -> Dictionary:
         result.model = android_build.MODEL
         result.fingerprint = android_build.FINGERPRINT
         result.android = version.RELEASE
-        if version.SDK_INT >= 29 and Engine.has_singleton("AndroidRuntime"):
+        if Engine.has_singleton("AndroidRuntime"):
             var activity = Engine.get_singleton("AndroidRuntime").getActivity()
             if activity != null:
+                var display = activity.getWindowManager().getDefaultDisplay()
+                var mode = display.getMode()
+                result.display_mode_size = [mode.getPhysicalWidth(), mode.getPhysicalHeight()]
+                result.display_rotation = display.getRotation()
+            if version.SDK_INT >= 29 and activity != null:
                 var power = activity.getSystemService("power")
                 if power != null:
                     var thermal = power.getCurrentThermalStatus()
@@ -289,6 +296,12 @@ func _device() -> Dictionary:
                     else:
                         result.thermal_error = "PowerManager thermal status unavailable (Java exception)"
     return result
+
+func _render_size() -> Array:
+    # Match the pinned renderer's float32 multiplication and integer truncation.
+    # roundi() misreports a 720px target at 65% by one pixel.
+    var scaled := PackedFloat32Array([size.x * viewport.scaling_3d_scale, size.y * viewport.scaling_3d_scale])
+    return [int(clampf(scaled[0], 1.0, 16384.0)), int(clampf(scaled[1], 1.0, 16384.0))]
 
 func _metadata() -> Dictionary:
     var engine: Dictionary = build.engine.duplicate(true)
@@ -302,8 +315,8 @@ func _metadata() -> Dictionary:
         "started_at": started_at, "warmup_seconds": 30, "measure_seconds": 60,
         "engine": engine, "device": device, "scene": build.scene,
         "environment": {"backend": api, "surface_size": [surface_size.x, surface_size.y],
-            "render_size": [roundi(size.x * viewport.scaling_3d_scale), roundi(size.y * viewport.scaling_3d_scale)],
-            "render_size_source": "viewport texture pixels times native scaling_3d_scale; attachment readback unavailable",
+            "render_size": _render_size(),
+            "render_size_source": "Godot 4.7.2 renderer_viewport.cpp: float32 multiply, clamp 1..16384, truncate to int; not attachment readback",
             "dynamic_resolution": false, "vsync_requested": "off" if applied else "engine_default",
             "presentation_mode": null, "refresh_hz": _refresh(), "refresh_limited_possible": true,
             "gpu_profiling": (preset == "gpu") if applied else true, "gpu": gpu if gpu != "" else null,
