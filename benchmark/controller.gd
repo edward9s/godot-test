@@ -183,26 +183,40 @@ func _process(_delta: float) -> void:
         RenderingServer.global_shader_parameter_set("benchmark_time", animation)
     if now >= poll_at:
         poll_at = now + 1000000
-        var compiled := 0
-        for kind in range(RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS, RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION + 1):
-            compiled += RenderingServer.get_rendering_info(kind)
-        if compiled != pipeline_count:
-            pipeline_count = compiled
-            stable_since = now
-            if protocol.phase == Protocol.Phase.MEASURE:
-                _invalidate("shader pipeline compilation during measurement")
-                return
-        if applied and _settings() != settings:
-            _invalidate("benchmark render settings changed")
-            return
-        if _refresh() != refresh:
-            _invalidate("display refresh rate changed")
+        var reason := _condition_error(now)
+        if not reason.is_empty():
+            _invalidate(reason)
             return
         progress.text = "%s · %d/3 · %s · cancel" % [preset, repetition, _phase_text(now)]
+    var reason := _surface_error()
+    if not reason.is_empty():
+        _invalidate(reason)
+
+func _pipeline_compilations() -> int:
+    var compiled := 0
+    for kind in range(RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS, RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION + 1):
+        compiled += RenderingServer.get_rendering_info(kind)
+    return compiled
+
+func _condition_error(now: int) -> String:
+    var compiled := _pipeline_compilations()
+    if compiled != pipeline_count:
+        pipeline_count = compiled
+        stable_since = now
+        if protocol.phase == Protocol.Phase.MEASURE:
+            return "shader pipeline compilation during measurement"
+    if applied and _settings() != settings:
+        return "benchmark render settings changed"
+    if _refresh() != refresh:
+        return "display refresh rate changed"
+    return ""
+
+func _surface_error() -> String:
     if Vector2i(viewport.get_texture().get_size()) != size or DisplayServer.window_get_size() != surface_size:
-        _invalidate("Surface dimensions changed")
-    elif applied and DisplayServer.window_get_vsync_mode() != observed_vsync:
-        _invalidate("VSync setting changed")
+        return "Surface dimensions changed"
+    if applied and DisplayServer.window_get_vsync_mode() != observed_vsync:
+        return "VSync setting changed"
+    return ""
 
 func _phase_text(now: int) -> String:
     if not applied or protocol.phase == Protocol.Phase.WAITING:
@@ -217,6 +231,11 @@ func _frame() -> void:
     if not active():
         return
     var now := Time.get_ticks_usec()
+    # Validate the pixels that were just rendered, including the final frame.
+    var reason := _surface_error()
+    if not reason.is_empty():
+        _invalidate(reason)
+        return
     if size != surface_size and DisplayServer.get_name() != "headless":
         _invalidate("viewport pixels differ from native Surface size")
         return
@@ -230,6 +249,13 @@ func _frame() -> void:
         if ready and reference_frames >= 120:
             _capture()
         return
+    # The last draw may compile a pipeline or change settings after _process's
+    # one-second poll. Recheck once before accepting the final sample.
+    if protocol.phase == Protocol.Phase.MEASURE and now - protocol.anchor >= Protocol.MEASURE_US:
+        reason = _condition_error(now)
+        if not reason.is_empty():
+            _invalidate(reason)
+            return
     if protocol.sample(now, ready, animation, effects.raw_update_ms if effects.is_processing() else 0.0):
         animation_origin = now
     if preset == "gpu" and protocol.phase == Protocol.Phase.MEASURE and protocol.count > 0:

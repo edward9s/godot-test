@@ -20,3 +20,6 @@ jobs:
           "$RUNNER_TEMP/Godot_v4.7.2-stable_linux.x86_64" --headless --path . --script scripts/test_benchmark.gd 2>&1 | tee "$RUNNER_TEMP/protocol.log"
           grep -F 'Benchmark protocol passed:' "$RUNNER_TEMP/protocol.log"
           if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/protocol.log"; then exit 1; fi
+          "$RUNNER_TEMP/Godot_v4.7.2-stable_linux.x86_64" --headless --path . --script scripts/test_benchmark_boundary.gd 2>&1 | tee "$RUNNER_TEMP/boundary.log"
+          grep -F 'Benchmark boundary passed:' "$RUNNER_TEMP/boundary.log"
+          if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/boundary.log"; then exit 1; fi
