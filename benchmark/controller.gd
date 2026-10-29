@@ -81,6 +81,13 @@ func _ready() -> void:
     report.offset_right = -16
     report.offset_bottom = -64
     layer.add_child(dialog)
+    var storage_error := DirAccess.make_dir_recursive_absolute(ROOT)
+    if storage_error != OK:
+        button.disabled = true
+        var message := "Cannot create benchmark storage: " + error_string(storage_error)
+        push_error(message)
+        _show(message)
+        return
     _recover()
     RenderingServer.frame_post_draw.connect(_frame)
 

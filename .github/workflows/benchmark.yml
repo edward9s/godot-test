@@ -23,3 +23,19 @@ jobs:
           "$RUNNER_TEMP/Godot_v4.7.2-stable_linux.x86_64" --headless --path . --script scripts/test_benchmark_boundary.gd 2>&1 | tee "$RUNNER_TEMP/boundary.log"
           grep -F 'Benchmark boundary passed:' "$RUNNER_TEMP/boundary.log"
           if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/boundary.log"; then exit 1; fi
+      - name: Benchmark scene and first-launch storage tests
+        run: |
+          set -euo pipefail
+          godot="$RUNNER_TEMP/Godot_v4.7.2-stable_linux.x86_64"
+          python3 -m pip install --disable-pip-version-check Pillow==11.3.0
+          python3 benchmark/build.py
+          python3 scripts/prepare_scene.py
+          "$godot" --headless --path . --editor --import --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          storage_user="$(mktemp -d "$RUNNER_TEMP/benchmark-storage.XXXXXX")"
+          XDG_DATA_HOME="$storage_user" timeout 60s "$godot" --headless --path . --script scripts/test_benchmark_storage.gd 2>&1 | tee "$RUNNER_TEMP/storage.log"
+          grep -F 'Benchmark storage passed:' "$RUNNER_TEMP/storage.log"
+          scene_user="$(mktemp -d "$RUNNER_TEMP/benchmark-scene.XXXXXX")"
+          XDG_DATA_HOME="$scene_user" timeout 60s "$godot" --headless --path . --script scripts/test_benchmark_scene.gd 2>&1 | tee "$RUNNER_TEMP/scene.log"
+          grep -F 'Benchmark scene passed:' "$RUNNER_TEMP/scene.log"
+          python3 benchmark/compare.py "$scene_user/godot/app_userdata/Forest Ruins Godot/benchmarks" --validate-only
+          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/import.log" "$RUNNER_TEMP/storage.log" "$RUNNER_TEMP/scene.log"; then exit 1; fi
