@@ -97,6 +97,10 @@ jobs:
       - name: Validate effects and scene runtime
         run: |
           set -euo pipefail
+          storage_user="$(mktemp -d "$RUNNER_TEMP/benchmark-storage.XXXXXX")"
+          XDG_DATA_HOME="$storage_user" timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_benchmark_storage.gd 2>&1 | tee "$RUNNER_TEMP/storage.log"
+          grep -F 'Benchmark storage passed:' "$RUNNER_TEMP/storage.log"
+          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/storage.log"; then exit 1; fi
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_effects.gd 2>&1 | tee "$RUNNER_TEMP/effects.log"
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_scene.gd 2>&1 | tee "$RUNNER_TEMP/scene.log"
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_resolution.gd 2>&1 | tee "$RUNNER_TEMP/resolution.log"
