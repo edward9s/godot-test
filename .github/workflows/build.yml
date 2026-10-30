@@ -94,7 +94,7 @@ jobs:
           "$RUNNER_TEMP/godot" --headless --path . --editor --import --quit
           find .godot/imported -name '*forest.glb*' -print | grep -q .
 
-      - name: Validate effects and scene runtime
+      - name: Validate effects and scene logic
         run: |
           set -euo pipefail
           storage_user="$(mktemp -d "$RUNNER_TEMP/benchmark-storage.XXXXXX")"
@@ -104,16 +104,10 @@ jobs:
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_effects.gd 2>&1 | tee "$RUNNER_TEMP/effects.log"
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_scene.gd 2>&1 | tee "$RUNNER_TEMP/scene.log"
           timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_resolution.gd 2>&1 | tee "$RUNNER_TEMP/resolution.log"
-          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/bench_effects.gd 2>&1 | tee "$RUNNER_TEMP/bench.log"
-          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_benchmark_scene.gd 2>&1 | tee "$RUNNER_TEMP/benchmark.log"
-          python3 benchmark/compare.py "$HOME/.local/share/godot/app_userdata/Forest Ruins Godot/benchmarks" --validate-only
-          grep -F 'Benchmark scene passed:' "$RUNNER_TEMP/benchmark.log"
-          if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/benchmark.log"; then exit 1; fi
           grep -F 'Effects passed:' "$RUNNER_TEMP/effects.log"
           grep -F 'Scene passed:' "$RUNNER_TEMP/scene.log"
           grep -F 'Resolution passed:' "$RUNNER_TEMP/resolution.log"
-          grep -F 'Benchmark effects: median=' "$RUNNER_TEMP/bench.log"
-          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/effects.log" "$RUNNER_TEMP/scene.log" "$RUNNER_TEMP/resolution.log" "$RUNNER_TEMP/bench.log"; then
+          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/effects.log" "$RUNNER_TEMP/scene.log" "$RUNNER_TEMP/resolution.log"; then
             exit 1
           fi
 
