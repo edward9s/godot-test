@@ -45,6 +45,16 @@ jobs:
           "$RUNNER_TEMP/godot" --headless --path . --editor --import --quit
           find .godot/imported -name '*forest.glb*' -print | grep -q .
 
+      - name: Validate render benchmark and scene metrics
+        run: |
+          set -euo pipefail
+          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/bench_effects.gd 2>&1 | tee "$RUNNER_TEMP/bench.log"
+          grep -F 'Benchmark effects: median=' "$RUNNER_TEMP/bench.log"
+          timeout 60s "$RUNNER_TEMP/godot" --headless --path . --script scripts/test_benchmark_scene.gd 2>&1 | tee "$RUNNER_TEMP/benchmark.log"
+          grep -F 'Benchmark scene passed:' "$RUNNER_TEMP/benchmark.log"
+          python3 benchmark/compare.py "$HOME/.local/share/godot/app_userdata/Forest Ruins Godot/benchmarks" --validate-only
+          if grep -E 'SCRIPT ERROR:|SHADER ERROR:|^ERROR:' "$RUNNER_TEMP/bench.log" "$RUNNER_TEMP/benchmark.log"; then exit 1; fi
+
       - name: Validate Vulkan stability and GPU uploads
         run: |
           set -euo pipefail
